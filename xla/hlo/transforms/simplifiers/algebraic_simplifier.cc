@@ -2145,6 +2145,29 @@ absl::Status AlgebraicSimplifierVisitor::HandleConstant(
   return absl::OkStatus();
 }
 
+absl::StatusOr<bool> AlgebraicSimplifierVisitor::TryToSimplifyDNNFusionDist(HloInstruction* sub) {
+  // (A+B)^2 - (A+B)*C = (A+B)*(A+B-C)
+  VLOG(10) << "trying transform [(A+B)^2 - (A+B)*C => (A+B)*(A+B-C)]: " << sub->ToString();
+  HloInstruction *lhs, *rhs;
+  CHECK(Match(sub, m::Subtract(m::Op(&lhs), m::Op(&rhs))));
+
+  // We do not need to match with a and b explicitly
+  // since we only need the sum of a and b
+  HloInstruction *a_plus_b, *temp, *c;
+  bool lhs_match = Match(lhs, m::Multiply(m::Op(&a_plus_b).WithOpcode(HloOpcode::kAdd), m::Op(&temp))) && Match (temp, m::Op().Is(a_plus_b));
+  bool rhs_match = Match(rhs, m::Multiply(m::Op().Is(a_plus_b), m::Op(&c)));
+
+  if (!lhs_match || !rhs_match) {
+    return false;
+  }
+  TF_ASSIGN_OR_RETURN(auto a_plus_b_minus_c,
+                        MakeBinaryHlo(HloOpcode::kSubtract, a_plus_b, c));
+  TF_ASSIGN_OR_RETURN(auto new_mul,
+                      MakeBinaryHlo(HloOpcode::kMultiply, a_plus_b, a_plus_b_minus_c));
+  TF_RETURN_IF_ERROR(ReplaceInstruction(sub, new_mul));
+  return true;
+}
+
 absl::Status AlgebraicSimplifierVisitor::HandleSubtract(HloInstruction* sub) {
   HloInstruction *lhs, *rhs;
   CHECK(Match(sub, m::Subtract(m::Op(&lhs), m::Op(&rhs))));
@@ -2182,6 +2205,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleSubtract(HloInstruction* sub) {
   VLOG(10) << "trying transform [A - A => 0] for integer A.";
   if (lhs == rhs && ShapeUtil::ElementIsIntegral(sub->shape())) {
     return ReplaceInstruction(sub, MakeScalarLike(sub, 0));
+  }
+
+  TF_ASSIGN_OR_RETURN(bool replaced,
+                      TryToSimplifyDNNFusionDist(sub));
+  if (replaced) {
+    return absl::OkStatus();
   }
 
   return absl::OkStatus();

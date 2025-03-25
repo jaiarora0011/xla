@@ -12990,5 +12990,28 @@ TEST_F(AlgebraicSimplifierTest, DistDivScalarTest) {
   EXPECT_THAT(m->entry_computation()->root_instruction(), GmockMatch(m::Divide(m::Add(), m::Broadcast(m::Parameter(1)))));
 }
 
+TEST_F(AlgebraicSimplifierTest, DNNFusionDistTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      a = s8[4,4] parameter(0)
+      b = s8[4,4] parameter(1)
+      c = s8[4,4] parameter(2)
+
+      add.0 = s8[4,4] add(a, b)
+      square.0 = s8[4,4] multiply(add.0, add.0)
+
+      mul.0 = s8[4,4] multiply(add.0, c)
+      ROOT sub.0 = s8[4,4] subtract(square.0, mul.0)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(
+    m->entry_computation()->root_instruction(),
+    GmockMatch(m::Multiply(m::Add(), m::Subtract())));
+}
+
 }  // namespace
 }  // namespace xla
