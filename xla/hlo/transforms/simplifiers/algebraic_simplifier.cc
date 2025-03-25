@@ -863,6 +863,28 @@ absl::Status AlgebraicSimplifierVisitor::HandleAbs(HloInstruction* abs) {
   return absl::OkStatus();
 }
 
+absl::StatusOr<bool> AlgebraicSimplifierVisitor::TryToSimplifyDistDivScalar(HloInstruction* add) {
+  // (x / broadcast(y)) + (z / broadcast(y)) => (x + z) / broadcast(y)
+  VLOG(10) << "trying transform [X / broadcast(Y) + Z / broadcast(Y) => (X + Z) / broadcast(Y)]: " << add->ToString();
+  HloInstruction *lhs, *rhs;
+  CHECK(Match(add, m::Add(m::Op(&lhs), m::Op(&rhs))));
+
+  HloInstruction *x, *y, *z;
+  bool lhs_match = Match(lhs, m::Divide(m::Op(&x), m::Op(&y))) && Match(y, m::Broadcast(m::Op().WithShape(m::Shape().IsScalar())));
+  bool rhs_match = Match(rhs, m::Divide(m::Op(&z), m::Op().Is(y)));
+
+  if (!lhs_match || !rhs_match) {
+    return false;
+  }
+  TF_ASSIGN_OR_RETURN(auto x_plus_z,
+                      MakeBinaryHlo(HloOpcode::kAdd, x, z));
+  TF_ASSIGN_OR_RETURN(auto new_divide,
+                      MakeBinaryHlo(HloOpcode::kDivide, x_plus_z, y));
+  TF_RETURN_IF_ERROR(ReplaceInstruction(add, new_divide));
+
+  return true;
+}
+
 absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
   HloInstruction *lhs, *rhs;
   CHECK(Match(add, m::Add(m::Op(&lhs), m::Op(&rhs))));
@@ -1010,6 +1032,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
                  lhs->AddInstruction(HloInstruction::CreateBinary(
                      add->shape(), HloOpcode::kAdd, a, b)),
                  c));
+  }
+
+  TF_ASSIGN_OR_RETURN(bool replaced,
+                      TryToSimplifyDistDivScalar(add));
+  if (replaced) {
+    return absl::OkStatus();
   }
 
   if (options_.is_layout_sensitive()) {

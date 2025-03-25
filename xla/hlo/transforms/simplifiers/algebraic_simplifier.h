@@ -809,6 +809,9 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
   absl::StatusOr<bool> RemoveRedundantStride(
       absl::Nonnull<HloInstruction*> slice);
 
+  absl::StatusOr<bool> TryToSimplifyDistDivScalar(
+    HloInstruction* add);
+
   // Current HloComputation instance the AlgebraicSimplifierVisitor is
   // traversing.
   HloComputation* computation_;

@@ -12972,5 +12972,23 @@ TEST_F(AlgebraicSimplifierTest, CopyReshapeToReshapeCopyWithHostCopies) {
   EXPECT_FALSE(simplifier.Run(m.get()).value());
 }
 
+TEST_F(AlgebraicSimplifierTest, DistDivScalarTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[3,4] parameter(0)
+      y = f32[] parameter(1)
+      z = f32[3,4] parameter(2)
+      y.bcast = f32[3,4] broadcast(y), dimensions={}
+      div.1 = f32[3,4] divide(x, y.bcast)
+      div.2 = f32[3,4] divide(z, y.bcast)
+      ROOT add = f32[3,4] add(div.1, div.2)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(), GmockMatch(m::Divide(m::Add(), m::Broadcast(m::Parameter(1)))));
+}
+
 }  // namespace
 }  // namespace xla
