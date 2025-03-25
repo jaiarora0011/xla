@@ -4815,6 +4815,32 @@ absl::Status AlgebraicSimplifierVisitor::TryToReorderConvAddMultiply(
   return ReplaceWithNewInstruction(multiply, std::move(new_add));
 }
 
+absl::StatusOr<bool> AlgebraicSimplifierVisitor::TryToSimplifyDNNFusionReduceSumAssoc(HloInstruction* mul) {
+  // (A * Reduce(B)) * (Reduce(B) * C) => A * Reduce(B)^2 * C
+  VLOG(10) << "trying transform [(A * Reduce(B)) * (Reduce(B) * C) => A * Reduce(B)^2 * C]: " << mul->ToString();
+  HloInstruction *lhs, *rhs;
+  CHECK(Match(mul, m::Multiply(m::Op(&lhs), m::Op(&rhs))));
+
+  HloInstruction *a, *red, *c;
+  // The rewrite is not restricted to sum reductions
+  bool lhs_match = Match(lhs, m::Multiply(m::Op(&a), m::Op(&red).WithOpcode(HloOpcode::kReduce)));
+  bool rhs_match = Match(rhs, m::Multiply(m::Op().Is(red), m::Op(&c)));
+
+  if (!lhs_match || !rhs_match) {
+    return false;
+  }
+  // Rewrite to Reduce(B)*Reduce(B) instead of Power(Reduce(B), 2)
+  TF_ASSIGN_OR_RETURN(auto red_squared,
+                      MakeBinaryHlo(HloOpcode::kMultiply, red, red));
+  TF_ASSIGN_OR_RETURN(auto mul_lhs,
+                      MakeBinaryHlo(HloOpcode::kMultiply, a, red_squared));
+  TF_ASSIGN_OR_RETURN(auto new_mul,
+                      MakeBinaryHlo(HloOpcode::kMultiply, mul_lhs, c));
+  TF_RETURN_IF_ERROR(ReplaceInstruction(mul, new_mul));
+
+  return true;
+}
+
 absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
     HloInstruction* multiply) {
   HloInstruction *lhs, *rhs;
@@ -5019,6 +5045,11 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
         multiply,
         HloInstruction::CreateBinary(multiply->shape(), HloOpcode::kDivide,
                                      MakeScalarLike(lhs, 1), lhs));
+  }
+  TF_ASSIGN_OR_RETURN(bool replaced,
+                      TryToSimplifyDNNFusionReduceSumAssoc(multiply));
+  if (replaced) {
+    return absl::OkStatus();
   }
 
   return TryToReorderConvAddMultiply(multiply);

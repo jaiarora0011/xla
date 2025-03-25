@@ -813,7 +813,10 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
     HloInstruction* add);
 
   absl::StatusOr<bool> TryToSimplifyDNNFusionDist(
-      HloInstruction* sub);
+    HloInstruction* sub);
+
+  absl::StatusOr<bool> TryToSimplifyDNNFusionReduceSumAssoc(
+    HloInstruction* mul);
 
   // Current HloComputation instance the AlgebraicSimplifierVisitor is
   // traversing.

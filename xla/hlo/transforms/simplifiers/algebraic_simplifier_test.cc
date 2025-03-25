@@ -12984,10 +12984,12 @@ TEST_F(AlgebraicSimplifierTest, DistDivScalarTest) {
       div.2 = f32[3,4] divide(z, y.bcast)
       ROOT add = f32[3,4] add(div.1, div.2)
     }
-)";
+  )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(), GmockMatch(m::Divide(m::Add(), m::Broadcast(m::Parameter(1)))));
+  EXPECT_THAT(
+    m->entry_computation()->root_instruction(),
+    GmockMatch(m::Divide(m::Add(), m::Broadcast(m::Parameter(1)))));
 }
 
 TEST_F(AlgebraicSimplifierTest, DNNFusionDistTest) {
@@ -13004,13 +13006,42 @@ TEST_F(AlgebraicSimplifierTest, DNNFusionDistTest) {
       mul.0 = s8[4,4] multiply(add.0, c)
       ROOT sub.0 = s8[4,4] subtract(square.0, mul.0)
     }
-)";
+  )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(
     m->entry_computation()->root_instruction(),
     GmockMatch(m::Multiply(m::Add(), m::Subtract())));
+}
+
+TEST_F(AlgebraicSimplifierTest, DNNFusionReduceSumAssocTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    sum_red {
+      param.0 = s8[] parameter(0)
+      param.1 = s8[] parameter(1)
+      ROOT add.0 = s8[] add(param.0, param.1)
+    }
+
+    ENTRY test {
+      a = s8[3] parameter(0)
+      b = s8[3,4,5] parameter(1)
+      c = s8[3] parameter(2)
+
+      zero = s8[] constant(0)
+      reduce.0 = s8[3] reduce(b, zero), dimensions={1,2}, to_apply=sum_red
+      mul.0 = s8[3] multiply(a, reduce.0)
+      mul.1 = s8[3] multiply(reduce.0, c)
+      ROOT mul.2 = s8[3] multiply(mul.0, mul.1)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(
+    m->entry_computation()->root_instruction(),
+    GmockMatch(m::Multiply(m::Multiply(m::Parameter(0), m::Multiply()), m::Parameter(2))));
 }
 
 }  // namespace
