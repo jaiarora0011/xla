@@ -4841,6 +4841,33 @@ absl::StatusOr<bool> AlgebraicSimplifierVisitor::TryToSimplifyDNNFusionReduceSum
   return true;
 }
 
+absl::StatusOr<bool> AlgebraicSimplifierVisitor::TryToSimplifyDNNFusionConvAssoc(HloInstruction* mul) {
+  // (1 / Conv(A,B)) * (1 / (Conv(A,B) * C)) => (1 / (Conv(A,B)^2)) * (1 / C)
+  VLOG(10) << "trying transform [(1 / Conv(A,B)) * (1 / (Conv(A,B) * C)) => (1 / (Conv(A,B)^2)) * (1 / C)]: " << mul->ToString();
+  HloInstruction *lhs, *rhs;
+  CHECK(Match(mul, m::Multiply(m::Op(&lhs), m::Op(&rhs))));
+
+  HloInstruction *one, *conv, *c;
+  bool lhs_match = Match(lhs, m::Divide(m::Op(&one), m::Op(&conv).WithOpcode(HloOpcode::kConvolution))) && IsAll(one, 1);
+  bool rhs_match = Match(rhs, m::Divide(m::Op().Is(one), m::Multiply(m::Op().Is(conv), m::Op(&c))));
+
+  if (!lhs_match || !rhs_match) {
+    return false;
+  }
+  // Rewrite to Conv(A,B)*Conv(A,B) instead of Power(Conv(A,B), 2)
+  TF_ASSIGN_OR_RETURN(auto conv_squared,
+                      MakeBinaryHlo(HloOpcode::kMultiply, conv, conv));
+  TF_ASSIGN_OR_RETURN(auto div_lhs,
+                      MakeBinaryHlo(HloOpcode::kDivide, one, conv_squared));
+  TF_ASSIGN_OR_RETURN(auto div_rhs,
+                      MakeBinaryHlo(HloOpcode::kDivide, one, c));
+  TF_ASSIGN_OR_RETURN(auto new_mul,
+                      MakeBinaryHlo(HloOpcode::kMultiply, div_lhs, div_rhs));
+  TF_RETURN_IF_ERROR(ReplaceInstruction(mul, new_mul));
+
+  return true;
+}
+
 absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
     HloInstruction* multiply) {
   HloInstruction *lhs, *rhs;
@@ -5048,6 +5075,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
   }
   TF_ASSIGN_OR_RETURN(bool replaced,
                       TryToSimplifyDNNFusionReduceSumAssoc(multiply));
+  if (replaced) {
+    return absl::OkStatus();
+  }
+
+  TF_ASSIGN_OR_RETURN(bool simplified,
+                      TryToSimplifyDNNFusionConvAssoc(multiply));
   if (replaced) {
     return absl::OkStatus();
   }

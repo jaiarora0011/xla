@@ -13041,7 +13041,39 @@ TEST_F(AlgebraicSimplifierTest, DNNFusionReduceSumAssocTest) {
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(
     m->entry_computation()->root_instruction(),
-    GmockMatch(m::Multiply(m::Multiply(m::Parameter(0), m::Multiply()), m::Parameter(2))));
+    GmockMatch(m::Multiply(m::Multiply(m::Parameter(0),
+                                       m::Multiply(m::Op().WithOpcode(HloOpcode::kReduce),
+                                                   m::Op().WithOpcode(HloOpcode::kReduce))),
+                           m::Parameter(2))));
+}
+
+TEST_F(AlgebraicSimplifierTest, DNNFusionConvAssocTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    ENTRY test {
+      a = f32[7,8,2] parameter(0)
+      b = f32[5,2,3] parameter(1)
+      c = f32[7,5,3] parameter(2)
+
+      convolution.4 = f32[7,5,3] convolution(a, b), window={size=5 pad=1_1 lhs_dilate=2 rhs_dilate=3}, dim_labels=b0f_0io->b0f
+      mul.0 = f32[7,5,3] multiply(convolution.4, c)
+
+      one = f32[] constant(1)
+      one.bcast = f32[7,5,3] broadcast(one), dimensions={}
+      div.0 = f32[7,5,3] divide(one.bcast, convolution.4)
+      div.1 = f32[7,5,3] divide(one.bcast, mul.0)
+      ROOT mul = f32[7,5,3] multiply(div.0, div.1)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(
+    m->entry_computation()->root_instruction(),
+    GmockMatch(m::Multiply(m::Divide(m::Op(),
+                                     m::Multiply(m::Op().WithOpcode(HloOpcode::kConvolution),
+                                                 m::Op().WithOpcode(HloOpcode::kConvolution))),
+                           m::Divide(m::Op(), m::Parameter(2)))));
 }
 
 }  // namespace
