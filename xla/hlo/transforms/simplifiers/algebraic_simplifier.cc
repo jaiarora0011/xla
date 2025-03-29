@@ -9974,6 +9974,126 @@ absl::Status AlgebraicSimplifierVisitor::HandleMap(HloInstruction* map) {
   return ReplaceWithNewInstruction(map, std::move(clone));
 }
 
+absl::StatusOr<bool> AlgebraicSimplifierVisitor::TryToSimplifyMatMulFuse(HloInstruction* tuple) {
+  // (Dot(A,B), Dot(A,C)) => Split(Dot(A, Concat(B,C)))
+  VLOG(10) << "trying transform [(Dot(A,B), Dot(A,C)) => Split(Dot(A, Concat(B,C)))]: " << tuple->ToString();
+  CHECK(Match(tuple, m::Tuple()));
+
+  if (tuple->operand_count() != 2) {
+    return false;
+  }
+  auto first = tuple->mutable_operand(0);
+  auto second = tuple->mutable_operand(1);
+
+  HloInstruction *a, *b, *c;
+  bool first_match = Match(first, m::Dot(m::Op(&a), m::Op(&b)));
+  bool second_match = Match(second, m::Dot(m::Op().Is(a), m::Op(&c)));
+
+  if (!first_match || !second_match) {
+    return false;
+  }
+
+  // Atmost one batch dimension, one contracting dimension
+  const DotDimensionNumbers& dnums_first = first->dot_dimension_numbers();
+  if (dnums_first.lhs_contracting_dimensions_size() != 1 ||
+      dnums_first.rhs_contracting_dimensions_size() != 1 ||
+      dnums_first.lhs_batch_dimensions_size() > 1 ||
+      dnums_first.rhs_batch_dimensions_size() > 1) {
+    return false;
+  }
+  // Exactly one spatial dimension in b, since we need to concatenate
+  // along it
+  int64_t b_spatial_dimensions_size = b->shape().dimensions().size() - dnums_first.rhs_batch_dimensions_size() - 1;
+  if (b_spatial_dimensions_size != 1) {
+    return false;
+  }
+
+  // Atmost one batch dimension, one contracting dimension
+  const DotDimensionNumbers& dnums_second = second->dot_dimension_numbers();
+  if (dnums_second.lhs_contracting_dimensions_size() != 1 ||
+      dnums_second.rhs_contracting_dimensions_size() != 1 ||
+      dnums_second.lhs_batch_dimensions_size() > 1 ||
+      dnums_second.rhs_batch_dimensions_size() > 1) {
+    return false;
+  }
+  // Exactly one spatial dimension in c, since we need to concatenate
+  // along it
+  int64_t c_spatial_dimensions_size = c->shape().dimensions().size() - dnums_second.rhs_batch_dimensions_size() - 1;
+  if (c_spatial_dimensions_size != 1) {
+    return false;
+  }
+  // The dnums in both the dots need to be the same
+  if (!absl::c_equal(dnums_first.lhs_batch_dimensions(),
+                     dnums_second.lhs_batch_dimensions()) ||
+      !absl::c_equal(dnums_first.rhs_batch_dimensions(),
+                     dnums_second.rhs_batch_dimensions()) ||
+      !absl::c_equal(dnums_first.lhs_contracting_dimensions(),
+                     dnums_second.lhs_contracting_dimensions()) ||
+      !absl::c_equal(dnums_first.rhs_contracting_dimensions(),
+                     dnums_second.rhs_contracting_dimensions())) {
+    return false;
+  }
+  // The batch dims in lhs and rhs of the dots need to be the same
+  if (!absl::c_equal(dnums_first.lhs_batch_dimensions(),
+                     dnums_first.rhs_batch_dimensions())) {
+    return false;
+  }
+  // We will concatenate b and c along the spatial dimension
+  // We can find it by collecting the contracting dimensions and batch
+  // dimensions and finding the first dimension that is not in the set
+  std::set<int64_t> used_dims;
+  used_dims.insert(dnums_first.rhs_contracting_dimensions().begin(),
+                   dnums_first.rhs_contracting_dimensions().end());
+  used_dims.insert(dnums_first.lhs_batch_dimensions().begin(),
+                   dnums_first.lhs_batch_dimensions().end());
+  int64_t spatial_dim = 0;
+  for (auto used_dim: used_dims) {
+    if (used_dim != spatial_dim) {
+      break;
+    }
+    ++spatial_dim;
+  }
+  // Create the concatenate operation
+  TF_ASSIGN_OR_RETURN(auto new_concat,
+                      MakeConcatHlo({b, c}, spatial_dim));
+  TF_ASSIGN_OR_RETURN(auto new_dot,
+                      MakeDotHlo(a, new_concat, dnums_first,
+                                 first->precision_config(),
+                                 first->shape().element_type()));
+  auto new_dot_shape = new_dot->shape();
+
+  // Make the LHS slice
+  DimensionVector start_indices(new_dot_shape.dimensions().size(), 0);
+  DimensionVector limit_indices(new_dot_shape.dimensions().begin(),
+                               new_dot_shape.dimensions().end());
+  DimensionVector strides(new_dot_shape.dimensions().size(), 1);
+  int64_t slice_dim = new_dot_shape.dimensions().size() - 1;
+  limit_indices[slice_dim] = first->shape().dimensions(slice_dim);
+  TF_ASSIGN_OR_RETURN(auto lhs_slice,
+                      MakeSliceHlo(new_dot, start_indices, limit_indices,
+                                   strides));
+
+  // Make the RHS slice
+  start_indices[slice_dim] = limit_indices[slice_dim];
+  limit_indices[slice_dim] = new_dot_shape.dimensions(slice_dim);
+  TF_ASSIGN_OR_RETURN(auto rhs_slice,
+                      MakeSliceHlo(new_dot, start_indices, limit_indices,
+                      strides));
+  TF_RETURN_IF_ERROR(ReplaceInstruction(tuple,
+                     MaybeMakeTuple({lhs_slice, rhs_slice})));
+  return true;
+}
+
+absl::Status AlgebraicSimplifierVisitor::HandleTuple(HloInstruction* tuple) {
+  TF_ASSIGN_OR_RETURN(bool replaced,
+                      TryToSimplifyMatMulFuse(tuple));
+  if (replaced) {
+    return absl::OkStatus();
+  }
+
+  return absl::OkStatus();
+}
+
 absl::StatusOr<bool> AlgebraicSimplifier::Run(
     HloModule* module,
     const absl::flat_hash_set<absl::string_view>& execution_threads) {

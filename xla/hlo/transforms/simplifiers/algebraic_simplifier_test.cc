@@ -13076,5 +13076,30 @@ TEST_F(AlgebraicSimplifierTest, DNNFusionConvAssocTest) {
                            m::Divide(m::Op(), m::Parameter(2)))));
 }
 
+TEST_F(AlgebraicSimplifierTest, MatMulFuseTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    ENTRY test {
+      a = s8[2,4,5] parameter(0)
+      b = s8[2,5,6] parameter(1)
+      c = s8[2,5,7] parameter(2)
+      dot.1 = s8[2,4,6] dot(a, b), lhs_contracting_dims={2}, rhs_contracting_dims={1}, lhs_batch_dims={0}, rhs_batch_dims={0}
+      dot.2 = s8[2,4,7] dot(a, c), lhs_contracting_dims={2}, rhs_contracting_dims={1}, lhs_batch_dims={0}, rhs_batch_dims={0}
+      ROOT tuple = (s8[2,4,6], s8[2,4,7]) tuple(dot.1, dot.2)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(
+    m->entry_computation()->root_instruction(),
+    GmockMatch(m::Tuple(m::Slice(m::Dot(m::Parameter(0),
+                                        m::Concatenate(m::Parameter(1),
+                                                       m::Parameter(2)))),
+                        m::Slice(m::Dot(m::Parameter(0),
+                                        m::Concatenate(m::Parameter(1),
+                                                       m::Parameter(2)))))));
+}
+
 }  // namespace
 }  // namespace xla

@@ -541,6 +541,8 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
 
   absl::Status HandleMap(HloInstruction* map) override;
 
+  absl::Status HandleTuple(HloInstruction* tuple) override;
+
   // Runs the visitor on a computation.
   bool Run(HloComputation* computation,
            const AlgebraicSimplifierOptions& options,
@@ -810,16 +812,19 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
       absl::Nonnull<HloInstruction*> slice);
 
   absl::StatusOr<bool> TryToSimplifyDistDivScalar(
-    HloInstruction* add);
+      HloInstruction* add);
 
   absl::StatusOr<bool> TryToSimplifyDNNFusionDist(
-    HloInstruction* sub);
+      HloInstruction* sub);
 
   absl::StatusOr<bool> TryToSimplifyDNNFusionReduceSumAssoc(
-    HloInstruction* mul);
+      HloInstruction* mul);
 
   absl::StatusOr<bool> TryToSimplifyDNNFusionConvAssoc(
-    HloInstruction* mul);
+      HloInstruction* mul);
+
+  absl::StatusOr<bool> TryToSimplifyMatMulFuse(
+      HloInstruction* tuple);
 
   // Current HloComputation instance the AlgebraicSimplifierVisitor is
   // traversing.
