@@ -1470,6 +1470,7 @@ cc_binary(
         "@tsl//tsl/platform:status",
         "@tsl//tsl/platform:statusor",
     ],
+    linkopts = ["-lm"],
 )
 
 stage_in_bin_subdirectory(
