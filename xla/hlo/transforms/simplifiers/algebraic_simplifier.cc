@@ -5017,61 +5017,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleNegate(HloInstruction* negate) {
     return absl::OkStatus();
   }
 
-  // CS526
-  // Implement Not(Ge(X, Y)) ==> Lt(X, Y)
-  HloInstruction* y;
-  if (Match(negate, m::Not(m::Ge(m::Op(&x), m::Op(&y))))) {
-    auto new_lt = negate->AddInstruction(
-        HloInstruction::CreateCompare(negate->shape(), x, y,
-                                      ComparisonDirection::kLt));
-    return ReplaceInstruction(negate, new_lt);
-  }
-
-  // CS526
-  // Implement Not(Le(X, Y)) ==> Gt(X, Y)
-  if (Match(negate, m::Not(m::Le(m::Op(&x), m::Op(&y))))) {
-    auto new_gt = negate->AddInstruction(
-        HloInstruction::CreateCompare(negate->shape(), x, y,
-                                      ComparisonDirection::kGt));
-    return ReplaceInstruction(negate, new_gt);
-  }
-
-  // CS526
-  // Implement Not(Eq(X, Y)) ==> Ne(X, Y)
-  if (Match(negate, m::Not(m::Eq(m::Op(&x), m::Op(&y))))) {
-    auto new_ne = negate->AddInstruction(
-        HloInstruction::CreateCompare(negate->shape(), x, y,
-                                      ComparisonDirection::kNe));
-    return ReplaceInstruction(negate, new_ne);
-  }
-
-  // CS526
-  // Implement Not(Gt(X, Y)) ==> Le(X, Y)
-  if (Match(negate, m::Not(m::Gt(m::Op(&x), m::Op(&y))))) {
-    auto new_le = negate->AddInstruction(
-        HloInstruction::CreateCompare(negate->shape(), x, y,
-                                      ComparisonDirection::kLe));
-    return ReplaceInstruction(negate, new_le);
-  }
-
-  // CS526
-  // Implement Not(Lt(X, Y)) ==> Ge(X, Y)
-  if (Match(negate, m::Not(m::Lt(m::Op(&x), m::Op(&y))))) {
-    auto new_ge = negate->AddInstruction(
-        HloInstruction::CreateCompare(negate->shape(), x, y,
-                                      ComparisonDirection::kGe));
-    return ReplaceInstruction(negate, new_ge);
-  }
-
-  // CS526
-  // Implement Not(Ne(X, Y)) ==> Eq(X, Y)
-  if (Match(negate, m::Not(m::Ne(m::Op(&x), m::Op(&y))))) {
-    auto new_eq = negate->AddInstruction(
-        HloInstruction::CreateCompare(negate->shape(), x, y,
-                                      ComparisonDirection::kEq));
-    return ReplaceInstruction(negate, new_eq);
-  }
-
   return absl::OkStatus();
 }
 
@@ -5083,6 +5028,62 @@ absl::Status AlgebraicSimplifierVisitor::HandleNot(
       ReplaceInstructionIfCompatible(logical_not, x)) {
     return absl::OkStatus();
   }
+
+  // CS526
+  // Implement Not(Ge(X, Y)) ==> Lt(X, Y)
+  HloInstruction* y;
+  if (Match(logical_not, m::Not(m::Ge(m::Op(&x), m::Op(&y))))) {
+    auto new_lt = logical_not->AddInstruction(
+        HloInstruction::CreateCompare(logical_not->shape(), x, y,
+                                      ComparisonDirection::kLt));
+    return ReplaceInstruction(logical_not, new_lt);
+  }
+
+  // CS526
+  // Implement Not(Le(X, Y)) ==> Gt(X, Y)
+  if (Match(logical_not, m::Not(m::Le(m::Op(&x), m::Op(&y))))) {
+    auto new_gt = logical_not->AddInstruction(
+        HloInstruction::CreateCompare(logical_not->shape(), x, y,
+                                      ComparisonDirection::kGt));
+    return ReplaceInstruction(logical_not, new_gt);
+  }
+
+  // CS526
+  // Implement Not(Eq(X, Y)) ==> Ne(X, Y)
+  if (Match(logical_not, m::Not(m::Eq(m::Op(&x), m::Op(&y))))) {
+    auto new_ne = logical_not->AddInstruction(
+        HloInstruction::CreateCompare(logical_not->shape(), x, y,
+                                      ComparisonDirection::kNe));
+    return ReplaceInstruction(logical_not, new_ne);
+  }
+
+  // CS526
+  // Implement Not(Gt(X, Y)) ==> Le(X, Y)
+  if (Match(logical_not, m::Not(m::Gt(m::Op(&x), m::Op(&y))))) {
+    auto new_le = logical_not->AddInstruction(
+        HloInstruction::CreateCompare(logical_not->shape(), x, y,
+                                      ComparisonDirection::kLe));
+    return ReplaceInstruction(logical_not, new_le);
+  }
+
+  // CS526
+  // Implement Not(Lt(X, Y)) ==> Ge(X, Y)
+  if (Match(logical_not, m::Not(m::Lt(m::Op(&x), m::Op(&y))))) {
+    auto new_ge = logical_not->AddInstruction(
+        HloInstruction::CreateCompare(logical_not->shape(), x, y,
+                                      ComparisonDirection::kGe));
+    return ReplaceInstruction(logical_not, new_ge);
+  }
+
+  // CS526
+  // Implement Not(Ne(X, Y)) ==> Eq(X, Y)
+  if (Match(logical_not, m::Not(m::Ne(m::Op(&x), m::Op(&y))))) {
+    auto new_eq = logical_not->AddInstruction(
+        HloInstruction::CreateCompare(logical_not->shape(), x, y,
+                                      ComparisonDirection::kEq));
+    return ReplaceInstruction(logical_not, new_eq);
+  }
+
   return absl::OkStatus();
 }
 

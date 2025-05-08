@@ -13070,7 +13070,7 @@ TEST_F(AlgebraicSimplifierTest, AddXNegX)
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Constant().WithShape(F32, {})));
+              GmockMatch(m::Broadcast(m::ConstantScalar(0))));
 }
 
 TEST_F(AlgebraicSimplifierTest, SubDivXYDivZY)
@@ -13103,7 +13103,7 @@ TEST_F(AlgebraicSimplifierTest, NotGeLt)
     test {
       x = f32[8] parameter(0)
       y = f32[8] parameter(1)
-      ge = f32[8] compare(x, y), direction=GE
+      ge = pred[8] compare(x, y), direction=GE
       ROOT out = pred[8] not(ge)
     }
   )";
@@ -13123,7 +13123,7 @@ TEST_F(AlgebraicSimplifierTest, NotLeGt)
     test {
       x = f32[8] parameter(0)
       y = f32[8] parameter(1)
-      le = f32[8] compare(x, y), direction=LE
+      le = pred[8] compare(x, y), direction=LE
       ROOT out = pred[8] not(le)
     }
   )";
@@ -13143,7 +13143,7 @@ TEST_F(AlgebraicSimplifierTest, NotEqNe)
     test {
       x = f32[8] parameter(0)
       y = f32[8] parameter(1)
-      eq = f32[8] compare(x, y), direction=EQ
+      eq = pred[8] compare(x, y), direction=EQ
       ROOT out = pred[8] not(eq)
     }
   )";
@@ -13163,7 +13163,7 @@ TEST_F(AlgebraicSimplifierTest, NotGtLe)
     test {
       x = f32[8] parameter(0)
       y = f32[8] parameter(1)
-      gt = f32[8] compare(x, y), direction=GT
+      gt = pred[8] compare(x, y), direction=GT
       ROOT out = pred[8] not(gt)
     }
   )";
@@ -13183,7 +13183,7 @@ TEST_F(AlgebraicSimplifierTest, NotLtGe)
     test {
       x = f32[8] parameter(0)
       y = f32[8] parameter(1)
-      lt = f32[8] compare(x, y), direction=LT
+      lt = pred[8] compare(x, y), direction=LT
       ROOT out = pred[8] not(lt)
     }
   )";
@@ -13203,7 +13203,7 @@ TEST_F(AlgebraicSimplifierTest, NotNeEq)
     test {
       x = f32[8] parameter(0)
       y = f32[8] parameter(1)
-      ne = f32[8] compare(x, y), direction=NE
+      ne = pred[8] compare(x, y), direction=NE
       ROOT out = pred[8] not(ne)
     }
   )";
@@ -13218,3 +13218,7 @@ TEST_F(AlgebraicSimplifierTest, NotNeEq)
 
 }  // namespace
 }  // namespace xla
+
+
+// [  FAILED  ] AlgebraicSimplifierTest.AddMulConst
+// [  FAILED  ] AlgebraicSimplifierTest.SelectWithBroadcasts
