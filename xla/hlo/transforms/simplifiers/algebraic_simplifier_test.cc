@@ -13052,7 +13052,7 @@ TEST_F(AlgebraicSimplifierTest, AddMulConst)
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::Multiply(m::Parameter(0),
-                                     m::Add(m::Constant(), m::Parameter(1)))));
+                                     m::Add(m::Broadcast(m::ConstantScalar(1)), m::Parameter(1)))));
 }
 
 TEST_F(AlgebraicSimplifierTest, AddXNegX)

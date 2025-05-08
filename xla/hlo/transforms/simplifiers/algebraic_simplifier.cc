@@ -883,15 +883,17 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
 
   // CS526
   // Implement Add(X, Mul(X, Y)) ==> Mul(X, Add(1, Y))
-  if (Match(add, m::Add(m::Op(&lhs), m::Op(&rhs))) &&
-      Match(rhs, m::Multiply(m::Op(&lhs), m::Op()))) {
-    HloInstruction* multiplier = rhs->mutable_operand(1);
-    HloInstruction* new_add = lhs->AddInstruction(
-        HloInstruction::CreateBinary(add->shape(), HloOpcode::kAdd,
-                                     multiplier, rhs));
-    HloInstruction* new_multiply = lhs->AddInstruction(
-        HloInstruction::CreateBinary(add->shape(), HloOpcode::kMultiply,
-                                     lhs, new_add));
+  HloInstruction* x;
+  HloInstruction* y;
+  if (Match(add, m::Add(m::Op(&x), m::Op(&rhs))) &&
+      Match(rhs, m::Multiply(m::Op(&x), m::Op(&y)))) {
+    HloInstruction* multiplier = MakeScalarLike(rhs, 1);
+    HloInstruction* add_one = add->AddInstruction(
+        HloInstruction::CreateBinary(rhs->shape(), HloOpcode::kAdd, multiplier,
+                                     y));
+    HloInstruction* new_multiply = add->AddInstruction(
+        HloInstruction::CreateBinary(rhs->shape(), HloOpcode::kMultiply, x,
+                                     add_one));
     return ReplaceInstruction(add, new_multiply);
   }
 
@@ -8825,26 +8827,33 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
 
   // CS526
   // Implement Select(Broadcast(P, S), Broadcast(X, S), Broadcast(Y, S)) ==> Broadcast(Select(P, X, Y), S)
-  HloInstruction* broadcast_ps;
-  HloInstruction* broadcast_xs;
-  HloInstruction* broadcast_ys;
-  if (Match(select, m::Select(m::Broadcast(&broadcast_ps),
-                              m::Broadcast(&broadcast_xs),
-                              m::Broadcast(&broadcast_ys))))
+  HloInstruction* broadcast_pred;
+  HloInstruction* broadcast_x;
+  HloInstruction* broadcast_y;
+  HloInstruction* p;
+  HloInstruction* x;
+  HloInstruction* y;
+  HloInstruction* s;
+  if (Match(select, m::Select(m::Op(&broadcast_pred),
+                              m::Op(&broadcast_x), m::Op(&broadcast_y))) &&
+      Match(broadcast_pred, m::Broadcast(m::Op(&p))) &&
+      Match(broadcast_x, m::Broadcast(m::Op(&x))) &&
+      Match(broadcast_y, m::Broadcast(m::Op(&y))))
   {
-    if (ShapeUtil::SameDimensions(broadcast_ps->shape(),
-                                  broadcast_xs->shape()) &&
-        ShapeUtil::SameDimensions(broadcast_ps->shape(),
-                                  broadcast_ys->shape())) {
+    if (ShapeUtil::SameDimensions(broadcast_pred->shape(),
+                                  broadcast_x->shape()) &&
+        ShapeUtil::SameDimensions(broadcast_pred->shape(),
+                                  broadcast_y->shape())) 
+    {
       HloInstruction* new_select = select->AddInstruction(
-          HloInstruction::CreateTernary(broadcast_xs->shape(),
+          HloInstruction::CreateTernary(x->shape(),
                                         HloOpcode::kSelect,
-                                        broadcast_ps, broadcast_xs,
-                                        broadcast_ys));
+                                        p, x,
+                                        y));
       return ReplaceWithNewInstruction(
           select, HloInstruction::CreateBroadcast(
                       select->shape(), new_select,
-                      broadcast_ps->dimensions()));
+                      broadcast_pred->dimensions()));
     }
   }
   
