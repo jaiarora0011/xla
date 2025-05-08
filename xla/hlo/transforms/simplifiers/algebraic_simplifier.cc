@@ -8924,7 +8924,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
                                                HloOpcode::kMaximum, x, y));
     }
 
-    if (cmp_dir == ComparisonDirection::kLe) {
+    if (cmp_dir == ComparisonDirection::kLt) {
       return ReplaceWithNewInstruction(
           select, HloInstruction::CreateBinary(select->shape(),
                                                HloOpcode::kMinimum, x, y));
