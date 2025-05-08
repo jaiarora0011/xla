@@ -881,29 +881,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
     return absl::OkStatus();
   }
 
-  // CS526
-  // Implement Add(X, Mul(X, Y)) ==> Mul(X, Add(1, Y))
-  HloInstruction* x;
-  HloInstruction* y;
-  if (Match(add, m::Add(m::Op(&x), m::Op(&rhs))) &&
-      Match(rhs, m::Multiply(m::Op(&x), m::Op(&y)))) {
-    HloInstruction* multiplier = MakeScalarLike(rhs, 1);
-    HloInstruction* add_one = add->AddInstruction(
-        HloInstruction::CreateBinary(rhs->shape(), HloOpcode::kAdd, multiplier,
-                                     y));
-    HloInstruction* new_multiply = add->AddInstruction(
-        HloInstruction::CreateBinary(rhs->shape(), HloOpcode::kMultiply, x,
-                                     add_one));
-    return ReplaceInstruction(add, new_multiply);
-  }
-
-  // CS526
-  // Implement Add(X, Neg(X)) ==> 0
-  if (Match(add, m::Add(m::Op(&lhs), m::Op(&rhs))) &&
-      Match(rhs, m::Negate(m::Op(&lhs)))) {
-    return ReplaceInstruction(add, MakeScalarLike(add, 0));      
-  }
-
   // Canonicalization: Put constants on the right.  This makes the reassociation
   // rules below simpler.
   VLOG(10) << "trying transform [Const + A => A + Const]";
@@ -1201,6 +1178,32 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
         MakeBinaryHlo(HloOpcode::kAdd, lhs_scatter_operand, rhs));
     TF_RETURN_IF_ERROR(lhs->ReplaceOperandWith(0, new_operand));
     return ReplaceInstruction(add, lhs);
+  }
+
+  // CS526
+  // Implement Add(X, Mul(X, Y)) ==> Mul(X, Add(1, Y))
+  HloInstruction* x;
+  HloInstruction* y;
+
+  if (Match(add, m::Add(m::Op(&x), m::Op(&rhs))) &&
+      (Match(rhs, m::Multiply(m::Op().Is(x), m::Op(&y))) ||
+    Match(rhs, m::Multiply(m::Op(&y), m::Op().Is(x)))))
+  {
+    HloInstruction* multiplier = MakeScalarLike(rhs, 1);
+    HloInstruction* add_one = add->AddInstruction(
+        HloInstruction::CreateBinary(rhs->shape(), HloOpcode::kAdd, multiplier,
+                                     y));
+    HloInstruction* new_multiply = add->AddInstruction(
+        HloInstruction::CreateBinary(rhs->shape(), HloOpcode::kMultiply, x,
+                                     add_one));
+    return ReplaceInstruction(add, new_multiply);
+  }
+
+  // CS526
+  // Implement Add(X, Neg(X)) ==> 0
+  if (Match(add, m::Add(m::Op(&lhs), m::Op(&rhs))) &&
+      Match(rhs, m::Negate(m::Op(&lhs)))) {
+    return ReplaceInstruction(add, MakeScalarLike(add, 0));      
   }
   return absl::OkStatus();
 }
