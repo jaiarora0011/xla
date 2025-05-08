@@ -1316,6 +1316,20 @@ absl::Status AlgebraicSimplifierVisitor::HandleAnd(
     return absl::OkStatus();
   }
 
+  // CS526
+  // Implement And(X, Not(X)) ==> False
+  if (Match(logical_and, m::And(m::Op(&lhs), m::Op(&rhs))) &&
+      Match(rhs, m::Not(m::Op().Is(lhs)))) {
+        return ReplaceInstruction(logical_and, MakeScalarLike(logical_and, false)); 
+  }
+
+  // CS526
+  // Implement And(X, X) ==> X
+  if (Match(logical_and, m::And(m::Op(&lhs), m::Op(&rhs))) &&
+      Match(rhs, m::Op().Is(lhs))) {
+        return ReplaceInstruction(logical_and, lhs); 
+  }
+
   return absl::OkStatus();
 }
 
@@ -4652,6 +4666,18 @@ absl::Status AlgebraicSimplifierVisitor::HandleMaximum(
                                              new_maximum));
   }
 
+  
+  // CS526
+  // Implement Max(Max(X, Y), Min(X, Y)) ==> Max(X, Y)
+  HloInstruction* x;
+  HloInstruction* y;
+  if (Match(maximum,
+            m::Maximum(m::Maximum(m::Op(&x), m::Op(&y)),
+                       m::Minimum(m::Op().Is(x), m::Op().Is(y))))) {
+    return ReplaceInstruction(maximum, lhs);
+  }
+
+
   return absl::OkStatus();
 }
 
@@ -4718,6 +4744,16 @@ absl::Status AlgebraicSimplifierVisitor::HandleMinimum(
     if (clamp) {
       return ReplaceWithNewInstruction(minimum, std::move(clamp));
     }
+  }
+
+  // CS526
+  // Implement Min(Max(X, Y), Min(X, Y)) ==> Min(X, Y)
+  HloInstruction* x;
+  HloInstruction* y;
+  if (Match(minimum,
+            m::Minimum(m::Maximum(m::Op(&x), m::Op(&y)),
+                       m::Minimum(m::Op().Is(x), m::Op().Is(y))))) {
+    return ReplaceInstruction(minimum, rhs);
   }
 
   return absl::OkStatus();
@@ -5123,6 +5159,19 @@ absl::Status AlgebraicSimplifierVisitor::HandleOr(HloInstruction* logical_or) {
   VLOG(10) << "trying transform [False || A => A]: " << logical_or->ToString();
   if (IsAll(lhs, 0) && ReplaceInstructionIfCompatible(logical_or, rhs)) {
     return absl::OkStatus();
+  }
+
+  // CS526
+  // Implement Or(X, Not(X)) ==> True
+  HloInstruction* x;
+  if (Match(logical_or, m::Or(m::Op(&x), m::Not(m::Op().Is(x))))) {
+    return ReplaceInstruction(logical_or, MakeScalarLike(logical_or, true)); 
+  }
+
+  // CS526
+  // Implement Or(X, X) ==> X
+  if (Match(logical_or, m::Or(m::Op(&x), m::Op().Is(x)))) {
+    return ReplaceInstruction(logical_or, x);
   }
 
   return absl::OkStatus();
@@ -8860,6 +8909,27 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
     }
   }
   
+
+  // CS526
+  // Implement Select(Ge(X, Y), X, Y) ==> Max(X, Y)
+  // Implement Select(Lt(X, Y), X, Y) ==> Min(X, Y)
+  HloInstruction* ge;
+  if (Match(select, m::Select(m::Op(&ge), m::Op(&x), m::Op(&y))) &&
+      Match(ge, m::Compare(m::Op().Is(x), m::Op().Is(y))))
+  {
+    auto cmp_dir = ge->comparison_direction();
+    if (cmp_dir == ComparisonDirection::kGe) {
+      return ReplaceWithNewInstruction(
+          select, HloInstruction::CreateBinary(select->shape(),
+                                               HloOpcode::kMaximum, x, y));
+    }
+
+    if (cmp_dir == ComparisonDirection::kLe) {
+      return ReplaceWithNewInstruction(
+          select, HloInstruction::CreateBinary(select->shape(),
+                                               HloOpcode::kMinimum, x, y));
+    }
+  }
 
   // select(pred, xs, dynamic_update_slice(xs, x, i))
   //     -> dynamic_update_slice(xs, select(pred, dynamic_slice(xs, i), x), i)
