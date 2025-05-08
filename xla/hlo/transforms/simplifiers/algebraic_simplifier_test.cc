@@ -13073,7 +13073,7 @@ TEST_F(AlgebraicSimplifierTest, AddXNegX)
               GmockMatch(m::Constant().WithShape(F32, {})));
 }
 
-TEST_F(AlgebraicSimplifierTest, SubDivXYZ)
+TEST_F(AlgebraicSimplifierTest, SubDivXYDivZY)
 {
   // Testing Sub(Div(X, Y), Div(Z, Y)) ==> Div(Sub(X, Z), Y)
   const char* kModuleStr = R"(
