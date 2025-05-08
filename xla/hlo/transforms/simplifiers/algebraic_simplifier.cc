@@ -8767,6 +8767,26 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
     return ReplaceWithNewInstruction(select, std::move(new_xs));
   }
 
+  // CS526
+  // select(P, add(X, Z), add(Y, Z)) -> add(select(P, X, Y), Z)
+  // TODO: MULTIOP
+  VLOG(10) << "Trying to transform select(P, add(X, Z), add(Y, Z)): "
+           << select->ToString();
+  HloInstruction *pred, *lhs, *rhs;
+  CHECK(Match(select, m::Select(m::Op(&pred), m::Op(&lhs), m::Op(&rhs))));
+
+  HloInstruction *x, *y, *z;
+  if ((Match(lhs, m::Add(m::Op(&x), m::Op(&z))) &&
+       Match(rhs, m::AddAnyOrder(m::Op(&y), m::Op().Is(z)))) ||
+      ((Match(lhs, m::Add(m::Op(&z), m::Op(&x))) &&
+        Match(rhs, m::AddAnyOrder(m::Op(&y), m::Op().Is(z)))))) {
+    TF_ASSIGN_OR_RETURN(auto new_select, MakeSelectHlo(pred, x, y));
+    TF_ASSIGN_OR_RETURN(auto new_add,
+                        MakeBinaryHlo(HloOpcode::kAdd, new_select, z));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(select, new_add));
+    return absl::OkStatus();
+  }
+
   return absl::OkStatus();
 }
 

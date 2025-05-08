@@ -13011,5 +13011,49 @@ TEST_F(AlgebraicSimplifierTest, CopyReshapeToReshapeCopyWithHostCopies) {
   EXPECT_FALSE(simplifier.Run(m.get()).value());
 }
 
+TEST_F(AlgebraicSimplifierTest, SelectAddXYZTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.p = pred[3,4] parameter(0)
+      arg.x = s8[3,4] parameter(1)
+      arg.y = s8[3,4] parameter(2)
+      arg.z = s8[3,4] parameter(3)
+
+      add.xz = s8[3,4] add(arg.x, arg.z)
+      add.yz = s8[3,4] add(arg.y, arg.z)
+      ROOT select.res = s8[3,4] select(arg.p, add.xz, add.yz)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Add(
+                  m::Select(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
+                  m::Parameter(3))));
+}
+
+TEST_F(AlgebraicSimplifierTest, SelectAddXYZAnyOrderTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.p = pred[3,4] parameter(0)
+      arg.x = s8[3,4] parameter(1)
+      arg.y = s8[3,4] parameter(2)
+      arg.z = s8[3,4] parameter(3)
+
+      add.xz = s8[3,4] add(arg.z, arg.x)
+      add.yz = s8[3,4] add(arg.z, arg.y)
+      ROOT select.res = s8[3,4] select(arg.p, add.xz, add.yz)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Add(
+                  m::Select(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
+                  m::Parameter(3))));
+}
+
 }  // namespace
 }  // namespace xla
