@@ -8724,6 +8724,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
     }
   }
 
+  // Implement Select(Broadcast(P, S), Broadcast(X, S), Broadcast(Y, S)) ==> Broadcast(Select(P, X, Y), S)
+  HloInstruction* broadcast_ps;
+  HloInstruction* broadcast_xs;
+  HloInstruction* broadcast_ys;
+  
+
   // select(pred, xs, dynamic_update_slice(xs, x, i))
   //     -> dynamic_update_slice(xs, select(pred, dynamic_slice(xs, i), x), i)
   HloInstruction* update_slice;
