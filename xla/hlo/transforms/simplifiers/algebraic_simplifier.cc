@@ -881,6 +881,27 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
     return absl::OkStatus();
   }
 
+  // CS526
+  // Implement Add(X, Mul(X, Y)) ==> Mul(X, Add(1, Y))
+  if (Match(add, m::Add(m::Op(&lhs), m::Op(&rhs))) &&
+      Match(rhs, m::Multiply(m::Op(&lhs), m::Op()))) {
+    HloInstruction* multiplier = rhs->mutable_operand(1);
+    HloInstruction* new_add = lhs->AddInstruction(
+        HloInstruction::CreateBinary(add->shape(), HloOpcode::kAdd,
+                                     multiplier, rhs));
+    HloInstruction* new_multiply = lhs->AddInstruction(
+        HloInstruction::CreateBinary(add->shape(), HloOpcode::kMultiply,
+                                     lhs, new_add));
+    return ReplaceInstruction(add, new_multiply);
+  }
+
+  // CS526
+  // Implement Add(X, Neg(X)) ==> 0
+  if (Match(add, m::Add(m::Op(&lhs), m::Op(&rhs))) &&
+      Match(rhs, m::Negate(m::Op(&lhs)))) {
+    return ReplaceInstruction(add, MakeScalarLike(add, 0));      
+  }
+
   // Canonicalization: Put constants on the right.  This makes the reassociation
   // rules below simpler.
   VLOG(10) << "trying transform [Const + A => A + Const]";
@@ -8724,10 +8745,30 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
     }
   }
 
+  // CS526
   // Implement Select(Broadcast(P, S), Broadcast(X, S), Broadcast(Y, S)) ==> Broadcast(Select(P, X, Y), S)
   HloInstruction* broadcast_ps;
   HloInstruction* broadcast_xs;
   HloInstruction* broadcast_ys;
+  if (Match(select, m::Select(m::Broadcast(&broadcast_ps),
+                              m::Broadcast(&broadcast_xs),
+                              m::Broadcast(&broadcast_ys))))
+  {
+    if (ShapeUtil::SameDimensions(broadcast_ps->shape(),
+                                  broadcast_xs->shape()) &&
+        ShapeUtil::SameDimensions(broadcast_ps->shape(),
+                                  broadcast_ys->shape())) {
+      HloInstruction* new_select = select->AddInstruction(
+          HloInstruction::CreateTernary(broadcast_xs->shape(),
+                                        HloOpcode::kSelect,
+                                        broadcast_ps, broadcast_xs,
+                                        broadcast_ys));
+      return ReplaceWithNewInstruction(
+          select, HloInstruction::CreateBroadcast(
+                      select->shape(), new_select,
+                      broadcast_ps->dimensions()));
+    }
+  }
   
 
   // select(pred, xs, dynamic_update_slice(xs, x, i))
