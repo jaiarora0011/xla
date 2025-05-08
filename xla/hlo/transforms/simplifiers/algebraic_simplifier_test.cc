@@ -13095,5 +13095,126 @@ TEST_F(AlgebraicSimplifierTest, SubDivXYDivZY)
                                    m::Parameter(1))));
 }
 
+TEST_F(AlgebraicSimplifierTest, NotGeLt)
+{
+  // Testing Not(Ge(X, Y)) ==> Lt(X, Y)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      y = f32[8] parameter(1)
+      ge = f32[8] compare(x, y), direction=GE
+      ROOT out = pred[8] not(ge)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
+              .WithComparisonDirection(ComparisonDirection::kLt)));
+}
+
+TEST_F(AlgebraicSimplifierTest, NotLeGt)
+{
+  // Testing Not(Le(X, Y)) ==> Gt(X, Y)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      y = f32[8] parameter(1)
+      le = f32[8] compare(x, y), direction=LE
+      ROOT out = pred[8] not(le)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
+              .WithComparisonDirection(ComparisonDirection::kGt)));
+}
+
+TEST_F(AlgebraicSimplifierTest, NotEqNe)
+{
+  // Testing Not(Eq(X, Y)) ==> Ne(X, Y)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      y = f32[8] parameter(1)
+      eq = f32[8] compare(x, y), direction=EQ
+      ROOT out = pred[8] not(eq)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
+              .WithComparisonDirection(ComparisonDirection::kNe)));
+}
+
+TEST_F(AlgebraicSimplifierTest, NotGtLe)
+{
+  // Testing Not(Gt(X, Y)) ==> Le(X, Y)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      y = f32[8] parameter(1)
+      gt = f32[8] compare(x, y), direction=GT
+      ROOT out = pred[8] not(gt)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
+              .WithComparisonDirection(ComparisonDirection::kLe)));
+}
+
+TEST_F(AlgebraicSimplifierTest, NotLtGe)
+{
+  // Testing Not(Lt(X, Y)) ==> Ge(X, Y)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      y = f32[8] parameter(1)
+      lt = f32[8] compare(x, y), direction=LT
+      ROOT out = pred[8] not(lt)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
+              .WithComparisonDirection(ComparisonDirection::kGe)));
+}
+
+TEST_F(AlgebraicSimplifierTest, NotNeEq)
+{
+  // Testing Not(Ne(X, Y)) ==> Eq(X, Y)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      y = f32[8] parameter(1)
+      ne = f32[8] compare(x, y), direction=NE
+      ROOT out = pred[8] not(ne)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
+              .WithComparisonDirection(ComparisonDirection::kEq)));
+}
+
+
 }  // namespace
 }  // namespace xla
