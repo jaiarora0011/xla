@@ -13363,6 +13363,26 @@ TEST_F(AlgebraicSimplifierTest, MinMaxMin)
               GmockMatch(m::Minimum(m::Parameter(0), m::Parameter(1))));
 }
 
+TEST_F(AlgebraicSimplifierTest, ConcatBroadcast)
+{
+  // Testing Concat(Broadcast(X, S), Broadcast(Y, S), dim) ==> Broadcast(Concat(X, Y, dim), S)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      y = f32[8] parameter(1)
+      b0 = f32[8, 2] broadcast(x), dimensions={0}
+      b1 = f32[8, 2] broadcast(y), dimensions={0}
+      ROOT out = f32[8, 4] concatenate(b0, b1), dimensions={1}
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Broadcast(m::Concatenate(m::Parameter(0), m::Parameter(1))))); 
+}
+
 }  // namespace
 }  // namespace xla
 

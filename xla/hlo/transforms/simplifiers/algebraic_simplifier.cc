@@ -1987,6 +1987,25 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
         MakeBroadcastHlo(MakeReshapeHlo(new_shape, operands[0]).value(),
                          broadcast_dims, concatenate->shape()));
   }
+
+  // CS526
+  // Implement Concat(Broadcast(X, S), Broadcast(Y, S), dim) ==> Broadcast(Concat(X, Y, dim), S)
+  HloInstruction* x;
+  HloInstruction* y;
+  if (Match(operands[0], m::Broadcast(m::Op(&x))) &&
+      Match(operands[1], m::Broadcast(m::Op(&y)))) 
+  {
+    auto dim = concatenate->concatenate_dimension();
+    auto new_concat = operands[0]->AddInstruction(
+        HloInstruction::CreateConcatenate(
+            ShapeUtil::ChangeElementType(operands[0]->shape(), x->shape().element_type()),
+            {x, y}, dim));
+    auto new_broadcast = operands[0]->AddInstruction(
+        HloInstruction::CreateBroadcast(
+            concatenate->shape(), new_concat, operands[0]->shape().dimensions()));
+    return ReplaceInstruction(concatenate, new_broadcast);    
+  }
+
   return absl::OkStatus();
 }
 
