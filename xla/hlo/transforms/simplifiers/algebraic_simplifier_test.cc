@@ -13383,6 +13383,87 @@ TEST_F(AlgebraicSimplifierTest, ConcatBroadcast)
               GmockMatch(m::Broadcast(m::Concatenate(m::Parameter(0), m::Parameter(1))))); 
 }
 
+TEST_F(AlgebraicSimplifierTest, NegMulNeg)
+{
+  // Testing Neg(Mul(Neg(X), Y)) ==> Mul(X, Y)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      y = f32[8] parameter(1)
+      neg_x = f32[8] negate(x)
+      mul = f32[8] multiply(neg_x, y)
+      ROOT out = f32[8] negate(mul)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Multiply(m::Parameter(0), m::Parameter(1))));
+}
+
+TEST_F(AlgebraicSimplifierTest, AddNegNeg)
+{
+  // Testing Add(Neg(X), Neg(Y)) ==> Neg(Add(X, Y))
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      y = f32[8] parameter(1)
+      neg_x = f32[8] negate(x)
+      neg_y = f32[8] negate(y)
+      ROOT out = f32[8] add(neg_x, neg_y)
+    }
+  )";
+
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Negate(m::Add(m::Parameter(0), m::Parameter(1)))));
+}
+
+TEST_F(AlgebraicSimplifierTest, NegSub)
+{
+  // Testing Neg(Sub(X, Y)) ==> Sub(Y, X)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      y = f32[8] parameter(1)
+      sub = f32[8] subtract(x, y)
+      ROOT out = f32[8] negate(sub)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Subtract(m::Parameter(1), m::Parameter(0))));
+}
+
+TEST_F(AlgebraicSimplifierTest, MaxAddAdd)
+{
+  // Testing Max(Add(X, Z), Add(Y, Z)) ==> Add(Max(X, Y), Z)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      y = f32[8] parameter(1)
+      z = f32[8] parameter(2)
+      add1 = f32[8] add(x, z)
+      add2 = f32[8] add(y, z)
+      ROOT out = f32[8] maximum(add1, add2)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Add(m::Maximum(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
+}
+
 }  // namespace
 }  // namespace xla
 

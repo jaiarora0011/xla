@@ -1205,6 +1205,20 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
       Match(rhs, m::Negate(m::Op(&lhs)))) {
     return ReplaceInstruction(add, MakeScalarLike(add, 0));      
   }
+
+  // CS526
+  // Implement Add(Neg(X), Neg(Y)) ==> Neg(Add(X, Y))
+  if (Match(add, m::Add(m::Op(&lhs), m::Op(&rhs))) &&
+      Match(lhs, m::Negate(m::Op(&x))) &&
+      Match(rhs, m::Negate(m::Op(&y)))) 
+  {
+    HloInstruction* neg_add = add->AddInstruction(
+        HloInstruction::CreateBinary(add->shape(), HloOpcode::kAdd, x, y));
+    HloInstruction* neg = add->AddInstruction(
+        HloInstruction::CreateUnary(add->shape(), HloOpcode::kNegate, neg_add));
+    return ReplaceInstruction(add, neg);
+  }
+
   return absl::OkStatus();
 }
 
@@ -4709,6 +4723,19 @@ absl::Status AlgebraicSimplifierVisitor::HandleMaximum(
     return ReplaceInstruction(maximum, lhs);
   }
 
+  // CS526
+  // Implement Max(Add(X, Z), Add(Y, Z)) ==> Add(Max(X, Y), Z)
+  HloInstruction* z;
+  if (Match(lhs, m::Add(m::Op(&x), m::Op(&z))) &&
+      Match(rhs, m::Add(m::Op(&y), m::Op().Is(z)))) {
+    TF_ASSIGN_OR_RETURN(
+        auto new_maximum,
+        MakeBinaryHlo(HloOpcode::kMaximum, x, y));
+    return ReplaceWithNewInstruction(
+        maximum, HloInstruction::CreateBinary(maximum->shape(), HloOpcode::kAdd,
+                                             new_maximum, z));
+  }
+
 
   return absl::OkStatus();
 }
@@ -5087,6 +5114,25 @@ absl::Status AlgebraicSimplifierVisitor::HandleNegate(HloInstruction* negate) {
   if (Match(negate, m::Negate(m::Negate(m::Op(&x)))) &&
       ReplaceInstructionIfCompatible(negate, x)) {
     return absl::OkStatus();
+  }
+
+  // CS526
+  // Implement Neg(Mul(Neg(X), Y)) ==> Mul(X, Y)
+  HloInstruction* y;
+  if (Match(negate, m::Multiply(m::Negate(m::Op(&x)), m::Op(&y)))) {
+    auto new_mul = negate->AddInstruction(
+        HloInstruction::CreateBinary(negate->shape(), HloOpcode::kMultiply,
+                                     x, y));
+    return ReplaceInstruction(negate, new_mul);
+  }
+
+  // CS526
+  // Implement Neg(Sub(X, Y)) ==> Sub(Y, X)
+  if (Match(negate, m::Subtract(m::Op(&x), m::Op(&y)))) {
+    auto new_sub = negate->AddInstruction(
+        HloInstruction::CreateBinary(negate->shape(), HloOpcode::kSubtract,
+                                     y, x));
+    return ReplaceInstruction(negate, new_sub);
   }
 
   return absl::OkStatus();
