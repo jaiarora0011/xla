@@ -13373,7 +13373,7 @@ TEST_F(AlgebraicSimplifierTest, ConcatBroadcast)
       y = f32[8] parameter(1)
       b0 = f32[8, 2] broadcast(x), dimensions={0}
       b1 = f32[8, 2] broadcast(y), dimensions={0}
-      ROOT out = f32[8, 4] concatenate(b0, b1), dimensions={1}
+      ROOT out = f32[16, 2] concatenate(b0, b1), dimensions={0}
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));

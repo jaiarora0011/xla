@@ -1937,6 +1937,37 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
     return absl::OkStatus();
   }
 
+  // CS526
+  // Implement Concat(Broadcast(X, S), Broadcast(Y, S), dim) ==> Broadcast(Concat(X, Y, dim), S)
+  HloInstruction* x;
+  HloInstruction* y;
+  if (Match(operands[0], m::Broadcast(m::Op(&x))) &&
+      Match(operands[1], m::Broadcast(m::Op(&y)))) 
+      {
+        auto dim = concatenate->concatenate_dimension();
+        if (x->shape().dimensions().size() > dim &&
+            y->shape().dimensions().size() > dim) {
+              auto x_shape = x->shape();
+              auto y_shape = y->shape();
+              Shape new_shape = x_shape;
+              for (int i = 0; i < new_shape.dimensions_size(); ++i) {
+                if (i == dim) {
+                  new_shape.set_dimensions(i,
+                    x_shape.dimensions(i) + y_shape.dimensions(i));
+                }
+              }
+
+            auto new_concat = operands[0]->AddInstruction(
+              HloInstruction::CreateConcatenate(
+                  new_shape,
+                  {x, y}, dim));
+            auto new_broadcast = operands[0]->AddInstruction(
+                HloInstruction::CreateBroadcast(
+                    concatenate->shape(), new_concat, operands[0]->dimensions()));
+            return ReplaceInstruction(concatenate, new_broadcast); 
+          }
+      }
+
   if (operands.size() == 2) {
     // A binary concat with a broadcasted scalar as an operand can be converted
     // into a pad which is simpler to fold into other operations.
@@ -1988,23 +2019,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
                          broadcast_dims, concatenate->shape()));
   }
 
-  // CS526
-  // Implement Concat(Broadcast(X, S), Broadcast(Y, S), dim) ==> Broadcast(Concat(X, Y, dim), S)
-  HloInstruction* x;
-  HloInstruction* y;
-  if (Match(operands[0], m::Broadcast(m::Op(&x))) &&
-      Match(operands[1], m::Broadcast(m::Op(&y)))) 
-  {
-    auto dim = concatenate->concatenate_dimension();
-    auto new_concat = operands[0]->AddInstruction(
-        HloInstruction::CreateConcatenate(
-            ShapeUtil::ChangeElementType(operands[0]->shape(), x->shape().element_type()),
-            {x, y}, dim));
-    auto new_broadcast = operands[0]->AddInstruction(
-        HloInstruction::CreateBroadcast(
-            concatenate->shape(), new_concat, operands[0]->shape().dimensions()));
-    return ReplaceInstruction(concatenate, new_broadcast);    
-  }
 
   return absl::OkStatus();
 }
