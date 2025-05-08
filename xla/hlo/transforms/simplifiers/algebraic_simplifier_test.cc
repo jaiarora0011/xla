@@ -13073,5 +13073,27 @@ TEST_F(AlgebraicSimplifierTest, AddXNegX)
               GmockMatch(m::Constant().WithShape(F32, {})));
 }
 
+TEST_F(AlgebraicSimplifierTest, SubDivXYZ)
+{
+  // Testing Sub(Div(X, Y), Div(Z, Y)) ==> Div(Sub(X, Z), Y)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      y = f32[8] parameter(1)
+      z = f32[8] parameter(2)
+      div1 = f32[8] divide(x, y)
+      div2 = f32[8] divide(z, y)
+      ROOT out = f32[8] subtract(div1, div2)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Divide(m::Subtract(m::Parameter(0), m::Parameter(2)),
+                                   m::Parameter(1))));
+}
+
 }  // namespace
 }  // namespace xla

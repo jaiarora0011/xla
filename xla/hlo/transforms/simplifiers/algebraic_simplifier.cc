@@ -2157,6 +2157,27 @@ absl::Status AlgebraicSimplifierVisitor::HandleSubtract(HloInstruction* sub) {
     return absl::OkStatus();
   }
 
+  // CS526
+  // Implement Sub(Div(X, Y), Div(Z, Y)) ==> Div(Sub(X, Z), Y)
+  HloInstruction* lhs_dividend;
+  HloInstruction* rhs_dividend;
+  HloInstruction* lhs_divisor;
+  HloInstruction* rhs_divisor;
+
+  if (Match(sub, m::Subtract(m::Divide(m::Op(&lhs_dividend), m::Op(&lhs_divisor)),
+                             m::Divide(m::Op(&rhs_dividend), m::Op(&rhs_divisor))))) {
+    if (lhs_divisor == rhs_divisor) {
+      HloInstruction* new_sub = sub->AddInstruction(
+          HloInstruction::CreateBinary(sub->shape(), HloOpcode::kSubtract,
+                                       lhs_dividend, rhs_dividend));
+      HloInstruction* new_div = sub->AddInstruction(
+          HloInstruction::CreateBinary(sub->shape(), HloOpcode::kDivide,
+                                       new_sub, lhs_divisor));
+      return ReplaceInstruction(sub, new_div);
+    }
+  }
+
+
   // Canonicalize subtraction of a constant to addition.
   VLOG(10) << "trying transform [A - Const => A + (-Const)]";
   if (Match(sub, m::Subtract(m::NonConstant(&lhs), m::Constant(&rhs))) ||
