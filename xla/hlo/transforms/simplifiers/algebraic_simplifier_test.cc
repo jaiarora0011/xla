@@ -13366,8 +13366,3 @@ TEST_F(AlgebraicSimplifierTest, MinMaxMin)
 }  // namespace
 }  // namespace xla
 
-
-// [  FAILED  ] AlgebraicSimplifierTest.OrXNotX
-// [  FAILED  ] AlgebraicSimplifierTest.MinMaxMin
-// [  FAILED  ] AlgebraicSimplifierTest.MaxMaxMin
-// [  FAILED  ] AlgebraicSimplifierTest.OrXX

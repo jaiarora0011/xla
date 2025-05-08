@@ -4671,9 +4671,8 @@ absl::Status AlgebraicSimplifierVisitor::HandleMaximum(
   // Implement Max(Max(X, Y), Min(X, Y)) ==> Max(X, Y)
   HloInstruction* x;
   HloInstruction* y;
-  if (Match(maximum,
-            m::Maximum(m::Maximum(m::Op(&x), m::Op(&y)),
-                       m::Minimum(m::Op().Is(x), m::Op().Is(y))))) {
+  if (Match(lhs, m::Maximum(m::Op(&x), m::Op(&y))) &&
+      Match(rhs, m::Minimum(m::Op().Is(x), m::Op().Is(y)))) {
     return ReplaceInstruction(maximum, lhs);
   }
 
@@ -4750,9 +4749,8 @@ absl::Status AlgebraicSimplifierVisitor::HandleMinimum(
   // Implement Min(Max(X, Y), Min(X, Y)) ==> Min(X, Y)
   HloInstruction* x;
   HloInstruction* y;
-  if (Match(minimum,
-            m::Minimum(m::Maximum(m::Op(&x), m::Op(&y)),
-                       m::Minimum(m::Op().Is(x), m::Op().Is(y))))) {
+  if (Match(lhs, m::Maximum(m::Op(&x), m::Op(&y))) &&
+      Match(rhs, m::Minimum(m::Op().Is(x), m::Op().Is(y)))) {
     return ReplaceInstruction(minimum, rhs);
   }
 
@@ -5164,14 +5162,16 @@ absl::Status AlgebraicSimplifierVisitor::HandleOr(HloInstruction* logical_or) {
   // CS526
   // Implement Or(X, Not(X)) ==> True
   HloInstruction* x;
-  if (Match(logical_or, m::Or(m::Op(&x), m::Not(m::Op().Is(x))))) {
+  if (Match(rhs, m::Not(m::Op().Is(lhs))) ||
+      Match(lhs, m::Not(m::Op().Is(rhs)))) 
+  {
     return ReplaceInstruction(logical_or, MakeScalarLike(logical_or, true)); 
   }
 
   // CS526
   // Implement Or(X, X) ==> X
-  if (Match(logical_or, m::Or(m::Op(&x), m::Op().Is(x)))) {
-    return ReplaceInstruction(logical_or, x);
+  if (Match(lhs, m::Op().Is(rhs))) {
+    return ReplaceInstruction(logical_or, lhs);
   }
 
   return absl::OkStatus();
