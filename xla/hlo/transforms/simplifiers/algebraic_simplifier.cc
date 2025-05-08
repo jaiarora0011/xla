@@ -4710,6 +4710,24 @@ absl::Status AlgebraicSimplifierVisitor::HandleClamp(HloInstruction* clamp) {
     }
   }
 
+  // CS526
+  // clamp(add(X, W), add(Y, W), add(Z, W)) -> add(clamp(X, Y, Z), W)
+  // TODO: MULTIOP
+  HloInstruction *x, *y, *z, *w;
+  if ((Match(clamp_lower_bound, m::Add(m::Op(&x), m::Op(&w))) &&
+       Match(to_clamp, m::AddAnyOrder(m::Op(&y), m::Op().Is(w))) &&
+       Match(clamp_upper_bound, m::AddAnyOrder(m::Op(&z), m::Op().Is(w)))) ||
+      (Match(clamp_lower_bound, m::Add(m::Op(&w), m::Op(&x))) &&
+       Match(to_clamp, m::AddAnyOrder(m::Op(&y), m::Op().Is(w))) &&
+       Match(clamp_upper_bound, m::AddAnyOrder(m::Op(&z), m::Op().Is(w))))) {
+    auto new_clamp = clamp->AddInstruction(HloInstruction::CreateTernary(
+        to_clamp->shape(), HloOpcode::kClamp, x, y, z));
+    TF_ASSIGN_OR_RETURN(auto new_add,
+                        MakeBinaryHlo(HloOpcode::kAdd, new_clamp, w));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, new_add));
+    return absl::OkStatus();
+  }
+
   return absl::OkStatus();
 }
 

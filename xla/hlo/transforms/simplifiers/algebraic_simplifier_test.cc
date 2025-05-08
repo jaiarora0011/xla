@@ -13055,5 +13055,51 @@ TEST_F(AlgebraicSimplifierTest, SelectAddXYZAnyOrderTest) {
                   m::Parameter(3))));
 }
 
+TEST_F(AlgebraicSimplifierTest, ClampAddTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s8[3,4] parameter(0)
+      arg.y = s8[3,4] parameter(1)
+      arg.z = s8[3,4] parameter(2)
+      arg.w = s8[3,4] parameter(3)
+
+      add.xw = s8[3,4] add(arg.x, arg.w)
+      add.yw = s8[3,4] add(arg.y, arg.w)
+      add.zw = s8[3,4] add(arg.z, arg.w)
+      ROOT clamp.res = s8[3,4] clamp(add.xw, add.yw, add.zw)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Add(
+                  m::Clamp(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
+                  m::Parameter(3))));
+}
+
+TEST_F(AlgebraicSimplifierTest, ClampAddAnyOrderTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s8[3,4] parameter(0)
+      arg.y = s8[3,4] parameter(1)
+      arg.z = s8[3,4] parameter(2)
+      arg.w = s8[3,4] parameter(3)
+
+      add.xw = s8[3,4] add(arg.w, arg.x)
+      add.yw = s8[3,4] add(arg.w, arg.y)
+      add.zw = s8[3,4] add(arg.z, arg.w)
+      ROOT clamp.res = s8[3,4] clamp(add.xw, add.yw, add.zw)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Add(
+                  m::Clamp(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
+                  m::Parameter(3))));
+}
+
 }  // namespace
 }  // namespace xla
