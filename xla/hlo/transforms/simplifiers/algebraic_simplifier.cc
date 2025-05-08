@@ -903,7 +903,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
       Match(add, m::Add(m::Add(m::NonConstant(&a),
                                m::Broadcast(m::ConstantScalar(&c1))),
                         m::Broadcast(m::ConstantScalar(&c2))))) {
-    TF_ASSIGN_OR_RETURN(auto* sum_of_constants,
+  TF_ASSIGN_OR_RETURN(auto* sum_of_constants,
                         MakeBinaryHlo(HloOpcode::kAdd, c1, c2));
     if (ShapeUtil::IsScalar(sum_of_constants->shape()) &&
         !ShapeUtil::IsScalar(add->shape())) {
@@ -921,7 +921,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
       Match(add, m::Add(m::Subtract(m::Broadcast(m::ConstantScalar(&c1)),
                                     m::NonConstant(&a)),
                         m::Broadcast(m::ConstantScalar(&c2))))) {
-    TF_ASSIGN_OR_RETURN(HloInstruction * sum_of_constants,
+  TF_ASSIGN_OR_RETURN(HloInstruction * sum_of_constants,
                         MakeBinaryHlo(HloOpcode::kAdd, c1, c2));
     if (ShapeUtil::IsScalar(sum_of_constants->shape()) &&
         !ShapeUtil::IsScalar(add->shape())) {
@@ -958,7 +958,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
                     .WithOpcode(HloOpcode::kDynamicUpdateSlice)
                     .WithOperand(
                         0, m::Broadcast(m::ConstantEffectiveScalar(0)))))) {
-    const Shape& partial_shape = rhs->operand(1)->shape();
+  const Shape& partial_shape = rhs->operand(1)->shape();
     auto sliced_lhs = lhs->AddInstruction(HloInstruction::CreateDynamicSlice(
         partial_shape, lhs, absl::MakeSpan(rhs->operands()).subspan(2),
         partial_shape.dimensions()));
@@ -1038,7 +1038,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
                      Match(rhs->to_apply()->root_instruction(),
                            m::Add(m::Parameter(), m::Parameter()));
   if (rhs_scatter && lhs_scatter) {
-    const auto& lhs_dnums = lhs->scatter_dimension_numbers();
+  const auto& lhs_dnums = lhs->scatter_dimension_numbers();
     const auto& rhs_dnums = rhs->scatter_dimension_numbers();
     std::optional<int64_t> index_concat_dimension;
     std::optional<int64_t> update_concat_dimension;
@@ -1189,7 +1189,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
       (Match(rhs, m::Multiply(m::Op().Is(x), m::Op(&y))) ||
     Match(rhs, m::Multiply(m::Op(&y), m::Op().Is(x)))))
   {
-    HloInstruction* multiplier = MakeScalarLike(rhs, 1);
+  HloInstruction* multiplier = MakeScalarLike(rhs, 1);
     HloInstruction* add_one = add->AddInstruction(
         HloInstruction::CreateBinary(rhs->shape(), HloOpcode::kAdd, multiplier,
                                      y));
@@ -1202,8 +1202,9 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
   // CS526
   // Implement Add(X, Neg(X)) ==> 0
   if (Match(add, m::Add(m::Op(&lhs), m::Op(&rhs))) &&
-      Match(rhs, m::Negate(m::Op(&lhs)))) {
-    return ReplaceInstruction(add, MakeScalarLike(add, 0));      
+      (Match(rhs, m::Negate(m::Op().Is(lhs))) || 
+      Match(lhs, m::Negate(m::Op().Is(rhs))))) {
+  return ReplaceInstruction(add, MakeScalarLike(add, 0));      
   }
 
   // CS526
@@ -1212,7 +1213,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
       Match(lhs, m::Negate(m::Op(&x))) &&
       Match(rhs, m::Negate(m::Op(&y)))) 
   {
-    HloInstruction* neg_add = add->AddInstruction(
+  HloInstruction* neg_add = add->AddInstruction(
         HloInstruction::CreateBinary(add->shape(), HloOpcode::kAdd, x, y));
     HloInstruction* neg = add->AddInstruction(
         HloInstruction::CreateUnary(add->shape(), HloOpcode::kNegate, neg_add));
@@ -5119,7 +5120,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleNegate(HloInstruction* negate) {
   // CS526
   // Implement Neg(Mul(Neg(X), Y)) ==> Mul(X, Y)
   HloInstruction* y;
-  if (Match(negate, m::Multiply(m::Negate(m::Op(&x)), m::Op(&y)))) {
+  if (Match(negate, m::Negate(m::Multiply(m::Negate(m::Op(&x)), m::Op(&y))))) {
     auto new_mul = negate->AddInstruction(
         HloInstruction::CreateBinary(negate->shape(), HloOpcode::kMultiply,
                                      x, y));
@@ -5128,7 +5129,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleNegate(HloInstruction* negate) {
 
   // CS526
   // Implement Neg(Sub(X, Y)) ==> Sub(Y, X)
-  if (Match(negate, m::Subtract(m::Op(&x), m::Op(&y)))) {
+  if (Match(negate, m::Negate(m::Subtract(m::Op(&x), m::Op(&y))))) {
     auto new_sub = negate->AddInstruction(
         HloInstruction::CreateBinary(negate->shape(), HloOpcode::kSubtract,
                                      y, x));
