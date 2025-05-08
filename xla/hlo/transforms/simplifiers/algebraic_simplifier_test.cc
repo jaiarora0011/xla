@@ -13101,5 +13101,44 @@ TEST_F(AlgebraicSimplifierTest, ClampAddAnyOrderTest) {
                   m::Parameter(3))));
 }
 
+TEST_F(AlgebraicSimplifierTest, MultiplyMaxMinTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s8[3,4] parameter(0)
+      arg.y = s8[3,4] parameter(1)
+
+      max.xy = s8[3,4] maximum(arg.x, arg.y)
+      min.xy = s8[3,4] minimum(arg.x, arg.y)
+      ROOT mul.res = s8[3,4] multiply(max.xy, min.xy)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::MultiplyAnyOrder(m::Parameter(0), m::Parameter(1))));
+}
+
+TEST_F(AlgebraicSimplifierTest, MultiplyMaxMinAnyOrderTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s8[3,4] parameter(0)
+      arg.y = s8[3,4] parameter(1)
+
+      max.xy = s8[3,4] maximum(arg.x, arg.y)
+      min.xy = s8[3,4] minimum(arg.y, arg.x)
+      ROOT mul.res = s8[3,4] multiply(min.xy, max.xy)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::MultiplyAnyOrder(m::Parameter(0), m::Parameter(1))));
+}
+
+
 }  // namespace
 }  // namespace xla

@@ -4713,6 +4713,8 @@ absl::Status AlgebraicSimplifierVisitor::HandleClamp(HloInstruction* clamp) {
   // CS526
   // clamp(add(X, W), add(Y, W), add(Z, W)) -> add(clamp(X, Y, Z), W)
   // TODO: MULTIOP
+  VLOG(10) << "Trying to transform clamp(add(X, W), add(Y, W), add(Z, W)) -> "
+           << "add(clamp(X, Y, Z), W): " << clamp->ToString();
   HloInstruction *x, *y, *z, *w;
   if ((Match(clamp_lower_bound, m::Add(m::Op(&x), m::Op(&w))) &&
        Match(to_clamp, m::AddAnyOrder(m::Op(&y), m::Op().Is(w))) &&
@@ -4980,6 +4982,22 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
         multiply,
         HloInstruction::CreateBinary(multiply->shape(), HloOpcode::kDivide,
                                      MakeScalarLike(lhs, 1), lhs));
+  }
+
+  // CS526
+  // mul(max(x, y), min(x, y)) -> mul(x, y)
+  // TODO: MULTIOP
+  CHECK(Match(multiply, m::Multiply(m::Op(&lhs), m::Op(&rhs))));
+
+  HloInstruction *x, *y;
+  if ((Match(lhs, m::Maximum(m::Op(&x), m::Op(&y))) &&
+       Match(rhs, m::MinimumAnyOrder(m::Op().Is(x), m::Op().Is(y)))) ||
+      ((Match(lhs, m::Minimum(m::Op(&x), m::Op(&y))) &&
+        Match(rhs, m::MaximumAnyOrder(m::Op().Is(x), m::Op().Is(y)))))) {
+    TF_ASSIGN_OR_RETURN(auto new_mul,
+                        MakeBinaryHlo(HloOpcode::kMultiply, x, y));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(multiply, new_mul));
+    return absl::OkStatus();
   }
 
   return TryToReorderConvAddMultiply(multiply);
