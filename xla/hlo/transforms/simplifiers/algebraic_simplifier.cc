@@ -9064,6 +9064,30 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
     }
   }
 
+  // CS526
+  // Implement Select(P, Add(X, Z), Add(Y, W)) ==> Add(Select(P, X, Y), Select(P, Z, W))
+  HloInstruction* add_xz;
+  HloInstruction* add_yw;
+  HloInstruction* pred;
+  HloInstruction* w;
+  HloInstruction* z;
+  if (Match(select, m::Select(m::Op(&pred), m::Op(&add_xz),
+                              m::Op(&add_yw))) &&
+      Match(add_xz, m::Add(m::Op(&x), m::Op(&z))) &&
+      Match(add_yw, m::Add(m::Op(&y), m::Op(&w)))) {
+    HloInstruction* new_select_x =
+        select->AddInstruction(HloInstruction::CreateTernary(
+            x->shape(), HloOpcode::kSelect, pred, x, y));
+    HloInstruction* new_select_z =
+        select->AddInstruction(HloInstruction::CreateTernary(
+            z->shape(), HloOpcode::kSelect, pred, z, w));
+    return ReplaceWithNewInstruction(
+        select,
+        HloInstruction::CreateBinary(select->shape(), HloOpcode::kAdd,
+                                     new_select_x, new_select_z));
+  }
+
+
   // select(pred, xs, dynamic_update_slice(xs, x, i))
   //     -> dynamic_update_slice(xs, select(pred, dynamic_slice(xs, i), x), i)
   HloInstruction* update_slice;

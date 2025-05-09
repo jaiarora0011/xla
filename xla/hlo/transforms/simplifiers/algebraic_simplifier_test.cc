@@ -13536,6 +13536,30 @@ TEST_F(AlgebraicSimplifierTest, ShiftLeft)
               GmockMatch(m::Parameter(0)));
 }
 
+TEST_F(AlgebraicSimplifierTest, SelectAddAdd)
+{
+  // Testing Select(P, Add(X, Z), Add(Y, W)) ==> Add(Select(P, X, Y), Select(P, Z, W))
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p = pred[8] parameter(0)
+      x = f32[8] parameter(1)
+      y = f32[8] parameter(2)
+      z = f32[8] parameter(3)
+      w = f32[8] parameter(4)
+      add1 = f32[8] add(x, z)
+      add2 = f32[8] add(y, w)
+      ROOT out = f32[8] select(p, add1, add2)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Add(m::Select(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
+                                m::Select(m::Parameter(0), m::Parameter(3), m::Parameter(4)))));
+}
+
 }  // namespace
 }  // namespace xla
 
