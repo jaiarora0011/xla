@@ -1235,6 +1235,47 @@ absl::Status AlgebraicSimplifierVisitor::HandleXor(HloInstruction* xor_op) {
 
 }
 
+absl::Status AlgebraicSimplifierVisitor::HandleShiftRightLogical(
+    HloInstruction* shift_right_logical) {
+  HloInstruction *lhs, *rhs;
+  CHECK(Match(shift_right_logical, 
+          m::ShiftRightLogical(m::Op(&lhs),
+          m::Op(&rhs))));
+
+  // CS526
+  // Implement Binary(ShiftRightLogical, A, Constant(0, S)) ==> A
+  if (Match(rhs, m::ConstantEffectiveScalar(0))) {
+    return ReplaceInstruction(shift_right_logical, lhs);
+  }
+}
+
+absl::Status AlgebraicSimplifierVisitor::HandleShiftRightArithmetic(
+    HloInstruction* shift_right_arithmetic) {
+  HloInstruction *lhs, *rhs;
+  CHECK(Match(shift_right_arithmetic, 
+          m::ShiftRightArithmetic(m::Op(&lhs),
+          m::Op(&rhs))));
+
+  // CS526
+  // Implement Binary(ShiftRightArithmetic, A, Constant(0, S)) ==> A
+  if (Match(rhs, m::ConstantEffectiveScalar(0))) {
+    return ReplaceInstruction(shift_right_arithmetic, lhs);
+  }
+}
+
+absl::Status AlgebraicSimplifierVisitor::HandleShiftLeft(
+    HloInstruction* shift_left) {
+  HloInstruction *lhs, *rhs;
+  CHECK(Match(shift_left, m::ShiftLeft(m::Op(&lhs), m::Op(&rhs))));
+
+  // CS526
+  // Implement Binary(ShiftLeft, A, Constant(0, S)) ==> A
+  if (Match(rhs, m::ConstantEffectiveScalar(0))) {
+    return ReplaceInstruction(shift_left, lhs);
+  }
+}
+
+
 absl::StatusOr<bool> AlgebraicSimplifierVisitor::TrySimplifyTautologicalCompare(
     HloInstruction* conjunction) {
   HloInstruction *lhs, *rhs;

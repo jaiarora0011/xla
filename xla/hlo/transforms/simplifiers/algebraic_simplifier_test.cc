@@ -13482,6 +13482,60 @@ TEST_F(AlgebraicSimplifierTest, Xor)
               GmockMatch(m::Broadcast(m::ConstantScalar(0))));
 }
 
+TEST_F(AlgebraicSimplifierTest, ShiftRightLogical)
+{
+  // Testing Binary(ShiftRightLogical, A, Constant(0, S)) ==> A
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = s32[8] parameter(0)
+      zeroes = s32[8] constant(0)
+      ROOT out = s32[8] shift-right-logical(x, zeroes)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Parameter(0)));
+}
+
+TEST_F(AlgebraicSimplifierTest, ShiftRightArithmetic)
+{
+  // Testing Binary(ShiftRightArithmetic, A, Constant(0, S)) ==> A
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = s32[8] parameter(0)
+      zeroes = s32[8] constant(0)
+      ROOT out = s32[8] shift-right-arithmetic(x, zeroes)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Parameter(0)));
+}
+
+TEST_F(AlgebraicSimplifierTest, ShiftLeft)
+{
+  // Binary(ShiftLeft, A, Constant(0, S)) ==> A
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = s32[8] parameter(0)
+      zeroes = s32[8] constant(0)
+      ROOT out = s32[8] shift-left(x, zeroes)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Parameter(0)));
+}
+
 }  // namespace
 }  // namespace xla
 
