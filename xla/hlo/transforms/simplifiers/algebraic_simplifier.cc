@@ -4605,6 +4605,19 @@ absl::Status AlgebraicSimplifierVisitor::HandleMaximum(
                                              new_maximum));
   }
 
+  // CS526
+  // max(x, 0) -> x if x is non-negative
+  VLOG(10) << "Trying to transform max(x, 0) to x: " << maximum->ToString();
+
+  if (IsAll(rhs, 0) && IsNonNegative(lhs, options_) &&
+      ReplaceInstructionIfCompatible(maximum, lhs)) {
+    return absl::OkStatus();
+  }
+  if (IsAll(lhs, 0) && IsNonNegative(rhs, options_) &&
+      ReplaceInstructionIfCompatible(maximum, rhs)) {
+    return absl::OkStatus();
+  }
+
   return absl::OkStatus();
 }
 
@@ -4667,10 +4680,28 @@ absl::Status AlgebraicSimplifierVisitor::HandleMinimum(
                                           m::ConstantEffectiveScalar()))))) {
     TF_ASSIGN_OR_RETURN(auto clamp,
                         MinMaxToClamp(clamp_lower_bound_bcast, to_clamp,
-                                      clamp_upper_bound_bcast, simplifier_));
+                                      clamp_upper_bound_bcast,    simplifier_));
     if (clamp) {
       return ReplaceWithNewInstruction(minimum, std::move(clamp));
     }
+  }
+
+  // CS526
+  // min(x, 0) -> 0 if x is non-negative
+  // Only applies for integral and boolean types for correct NaN-handling.
+  VLOG(10) << "Trying to transform min(x, 0) to 0: " << minimum->ToString();
+
+  if (IsAll(rhs, 0) &&
+      !primitive_util::IsFloatingPointType(minimum->shape().element_type()) &&
+      IsNonNegative(lhs, options_) &&
+      ReplaceInstructionIfCompatible(minimum, rhs)) {
+    return absl::OkStatus();
+  }
+  if (IsAll(lhs, 0) &&
+      !primitive_util::IsFloatingPointType(minimum->shape().element_type()) &&
+      IsNonNegative(rhs, options_) &&
+      ReplaceInstructionIfCompatible(minimum, lhs)) {
+    return absl::OkStatus();
   }
 
   return absl::OkStatus();
@@ -4988,7 +5019,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
   // mul(max(x, y), min(x, y)) -> mul(x, y)
   // TODO: MULTIOP
   CHECK(Match(multiply, m::Multiply(m::Op(&lhs), m::Op(&rhs))));
-
+  VLOG(10) << "mul(max(x, y), min(x, y)) -> mul(x, y)" << multiply->ToString();
   HloInstruction *x, *y;
   if ((Match(lhs, m::Maximum(m::Op(&x), m::Op(&y))) &&
        Match(rhs, m::MinimumAnyOrder(m::Op().Is(x), m::Op().Is(y)))) ||
@@ -8806,8 +8837,8 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
   // CS526
   // select(P, add(X, Z), add(Y, Z)) -> add(select(P, X, Y), Z)
   // TODO: MULTIOP
-  VLOG(10) << "Trying to transform select(P, add(X, Z), add(Y, Z)): "
-           << select->ToString();
+  VLOG(10) << "Trying to transform select(P, add(X, Z), add(Y, Z)) -> "
+           << "add(select(P, X, Y), Z): " << select->ToString();
   HloInstruction *pred, *lhs, *rhs;
   CHECK(Match(select, m::Select(m::Op(&pred), m::Op(&lhs), m::Op(&rhs))));
 

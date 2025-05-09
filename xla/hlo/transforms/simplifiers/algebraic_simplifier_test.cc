@@ -13139,6 +13139,107 @@ TEST_F(AlgebraicSimplifierTest, MultiplyMaxMinAnyOrderTest) {
       GmockMatch(m::MultiplyAnyOrder(m::Parameter(0), m::Parameter(1))));
 }
 
+TEST_F(AlgebraicSimplifierTest, MaxZeroAbsTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = s8[3,4] parameter(0)
+
+      abs.1 = s8[3,4] abs(arg.0)
+      zero = s8[] constant(0)
+      bcast.zero = s8[3,4] broadcast(zero), dimensions={}
+      ROOT max.res = s8[3,4] maximum(abs.1, bcast.zero)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Abs(m::Parameter(0))));
+}
+
+TEST_F(AlgebraicSimplifierTest, MaxZeroIotaTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      iota.0 = f32[3,4] iota(), iota_dimension=0
+      zero = f32[] constant(0)
+      bcast.zero = f32[3,4] broadcast(zero), dimensions={}
+      ROOT max.res = f32[3,4] maximum(bcast.zero, iota.0)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Iota()));
+}
+
+TEST_F(AlgebraicSimplifierTest, MinZeroAbsTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = s8[3,4] parameter(0)
+
+      abs.1 = s8[3,4] abs(arg.0)
+      zero = s8[] constant(0)
+      bcast.zero = s8[3,4] broadcast(zero), dimensions={}
+      ROOT min.res = s8[3,4] minimum(abs.1, bcast.zero)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Broadcast(m::ConstantScalar(0))));
+}
+
+TEST_F(AlgebraicSimplifierTest, MinZeroIotaTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      iota.0 = s8[3,4] iota(), iota_dimension=0
+      zero = s8[] constant(0)
+      bcast.zero = s8[3,4] broadcast(zero), dimensions={}
+      ROOT min.res = s8[3,4] minimum(bcast.zero, iota.0)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Broadcast(m::ConstantScalar(0))));
+}
+
+TEST_F(AlgebraicSimplifierTest, MinZeroBoolTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = pred[3,4] parameter(0)
+
+      mul.1 = pred[3,4] multiply(arg.0, arg.0)
+      zero = pred[] constant(false)
+      bcast.zero = pred[3,4] broadcast(zero), dimensions={}
+      ROOT min.res = pred[3,4] minimum(mul.1, bcast.zero)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Broadcast(m::ConstantScalar(0))));
+}
+
+TEST_F(AlgebraicSimplifierTest, MinZeroAbsF32NegativeTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = f32[3,4] parameter(0)
+
+      abs.1 = f32[3,4] abs(arg.0)
+      zero = f32[] constant(0)
+      bcast.zero = f32[3,4] broadcast(zero), dimensions={}
+      ROOT min.res = f32[3,4] minimum(abs.1, bcast.zero)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_FALSE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+}
 
 }  // namespace
 }  // namespace xla
