@@ -1199,15 +1199,14 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
   // pad(X, v) + pad(Y, v) -> pad(X + Y, v)
   VLOG(10) << "Trying to transform pad(X) + pad(Y) to pad(X + Y): "
            << add->ToString();
-  HloInstruction *pad_lhs, *pad_rhs, *x, *y;
-  if (Match(lhs, m::Pad(&pad_lhs, m::Op(&x), m::ConstantScalar(0))) &&
-      Match(rhs, m::Pad(&pad_rhs, m::Op(&y), m::ConstantScalar(0))) &&
-      SameShape(x, y) &&
-      SamePaddingConfig(pad_lhs->padding_config(), pad_rhs->padding_config())) {
+  HloInstruction *x, *y;
+  if (Match(lhs, m::Pad(m::Op(&x), m::ConstantScalar(0))) &&
+      Match(rhs, m::Pad(m::Op(&y), m::ConstantScalar(0))) && SameShape(x, y) &&
+      SamePaddingConfig(lhs->padding_config(), rhs->padding_config())) {
     TF_ASSIGN_OR_RETURN(auto new_add, MakeBinaryHlo(HloOpcode::kAdd, x, y));
-    TF_ASSIGN_OR_RETURN(auto new_pad,
-                        MakePadHlo(new_add, pad_lhs->mutable_operand(1),
-                                   pad_lhs->padding_config()));
+    TF_ASSIGN_OR_RETURN(
+        auto new_pad,
+        MakePadHlo(new_add, lhs->mutable_operand(1), lhs->padding_config()));
     TF_RETURN_IF_ERROR(ReplaceInstruction(add, new_pad));
     return absl::OkStatus();
   }
@@ -2196,16 +2195,15 @@ absl::Status AlgebraicSimplifierVisitor::HandleSubtract(HloInstruction* sub) {
   // pad(X, v) - pad(Y, v) -> pad(X - Y, v) if v = 0
   VLOG(10) << "Trying to transform pad(X) - pad(Y) to pad(X - Y): "
            << sub->ToString();
-  HloInstruction *pad_lhs, *pad_rhs, *x, *y;
-  if (Match(lhs, m::Pad(&pad_lhs, m::Op(&x), m::ConstantScalar(0))) &&
-      Match(rhs, m::Pad(&pad_rhs, m::Op(&y), m::ConstantScalar(0))) &&
-      SameShape(x, y) &&
-      SamePaddingConfig(pad_lhs->padding_config(), pad_rhs->padding_config())) {
+  HloInstruction *x, *y;
+  if (Match(lhs, m::Pad(m::Op(&x), m::ConstantScalar(0))) &&
+      Match(rhs, m::Pad(m::Op(&y), m::ConstantScalar(0))) && SameShape(x, y) &&
+      SamePaddingConfig(lhs->padding_config(), rhs->padding_config())) {
     TF_ASSIGN_OR_RETURN(auto new_sub,
                         MakeBinaryHlo(HloOpcode::kSubtract, x, y));
-    TF_ASSIGN_OR_RETURN(auto new_pad,
-                        MakePadHlo(new_sub, pad_lhs->mutable_operand(1),
-                                   pad_lhs->padding_config()));
+    TF_ASSIGN_OR_RETURN(
+        auto new_pad,
+        MakePadHlo(new_sub, lhs->mutable_operand(1), lhs->padding_config()));
     TF_RETURN_IF_ERROR(ReplaceInstruction(sub, new_pad));
     return absl::OkStatus();
   }
@@ -2365,15 +2363,13 @@ absl::Status AlgebraicSimplifierVisitor::HandleDivide(HloInstruction* divide) {
   VLOG(10) << "Trying to transform pad(X) / pad(Y) to pad(X / Y): "
            << divide->ToString();
   CHECK(Match(divide, m::Divide(m::Op(&a), m::Op(&b))));
-  HloInstruction *pad_lhs, *pad_rhs, *x, *y;
-  if (Match(a, m::Pad(&pad_lhs, m::Op(&x), m::ConstantScalar(1))) &&
-      Match(b, m::Pad(&pad_rhs, m::Op(&y), m::ConstantScalar(1))) &&
-      SameShape(x, y) &&
-      SamePaddingConfig(pad_lhs->padding_config(), pad_rhs->padding_config())) {
+  HloInstruction *x, *y;
+  if (Match(a, m::Pad(m::Op(&x), m::ConstantScalar(1))) &&
+      Match(b, m::Pad(m::Op(&y), m::ConstantScalar(1))) && SameShape(x, y) &&
+      SamePaddingConfig(a->padding_config(), b->padding_config())) {
     TF_ASSIGN_OR_RETURN(auto new_div, MakeBinaryHlo(HloOpcode::kDivide, x, y));
-    TF_ASSIGN_OR_RETURN(auto new_pad,
-                        MakePadHlo(new_div, pad_lhs->mutable_operand(1),
-                                   pad_lhs->padding_config()));
+    TF_ASSIGN_OR_RETURN(auto new_pad, MakePadHlo(new_div, a->mutable_operand(1),
+                                                 a->padding_config()));
     TF_RETURN_IF_ERROR(ReplaceInstruction(divide, new_pad));
     return absl::OkStatus();
   }
@@ -5104,17 +5100,17 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
   // pad(X, v) * pad(Y, v) -> pad(X * Y, v) if v = 1
   VLOG(10) << "Trying to transform pad(X) * pad(Y) to pad(X * Y): "
            << multiply->ToString();
-  HloInstruction *pad_lhs, *pad_rhs, *val;
-  if (Match(lhs, m::Pad(&pad_lhs, m::Op(&x), m::Op(&val))) &&
-      Match(rhs, m::Pad(&pad_rhs, m::Op(&y), m::Op().Is(val))) &&
+  HloInstruction* val;
+  if (Match(lhs, m::Pad(m::Op(&x), m::Op(&val))) &&
+      Match(rhs, m::Pad(m::Op(&y), m::Op().Is(val))) &&
       (Match(val, m::ConstantScalar(0)) || Match(val, m::ConstantScalar(1))) &&
       SameShape(x, y) &&
-      SamePaddingConfig(pad_lhs->padding_config(), pad_rhs->padding_config())) {
+      SamePaddingConfig(lhs->padding_config(), rhs->padding_config())) {
     TF_ASSIGN_OR_RETURN(auto new_mul,
                         MakeBinaryHlo(HloOpcode::kMultiply, x, y));
-    TF_ASSIGN_OR_RETURN(auto new_pad,
-                        MakePadHlo(new_mul, pad_lhs->mutable_operand(1),
-                                   pad_lhs->padding_config()));
+    TF_ASSIGN_OR_RETURN(
+        auto new_pad,
+        MakePadHlo(new_mul, lhs->mutable_operand(1), lhs->padding_config()));
     TF_RETURN_IF_ERROR(ReplaceInstruction(multiply, new_pad));
     return absl::OkStatus();
   }
