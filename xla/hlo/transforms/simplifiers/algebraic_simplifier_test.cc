@@ -13416,5 +13416,98 @@ TEST_F(AlgebraicSimplifierTest, SliceIotaTest) {
             0);
 }
 
+TEST_F(AlgebraicSimplifierTest, SliceIotaNegativeTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      iota.0 = s8[6,9,12] iota(), iota_dimension=0
+      ROOT slice.res = s8[3,4,5] slice(iota.0), slice={[1:4:1], [0:7:2], [3:8:1]}
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_FALSE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+}
+
+TEST_F(AlgebraicSimplifierTest, ClampXXY) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = s8[3,4] parameter(0)
+      arg.1 = s8[3,4] parameter(1)
+
+      ROOT clamp.res = s8[3,4] clamp(arg.0, arg.0, arg.1)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Minimum(m::Parameter(0), m::Parameter(1))));
+}
+
+TEST_F(AlgebraicSimplifierTest, ClampXXYScalar) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = s8[3,4] parameter(0)
+      arg.1 = s8[] parameter(1)
+
+      ROOT clamp.res = s8[3,4] clamp(arg.0, arg.0, arg.1)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Minimum(m::Parameter(0), m::Broadcast(m::Parameter(1)))));
+}
+
+TEST_F(AlgebraicSimplifierTest, ClampYXY) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = s8[3,4] parameter(0)
+      arg.1 = s8[3,4] parameter(1)
+
+      ROOT clamp.res = s8[3,4] clamp(arg.1, arg.0, arg.1)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Parameter(1)));
+}
+
+TEST_F(AlgebraicSimplifierTest, ClampYXYScalar) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = s8[3,4] parameter(0)
+      arg.1 = s8[] parameter(1)
+
+      ROOT clamp.res = s8[3,4] clamp(arg.1, arg.0, arg.1)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Broadcast(m::Parameter(1))));
+}
+
+TEST_F(AlgebraicSimplifierTest, ClampYXYFPNegativeTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = f32[3,4] parameter(0)
+      arg.1 = f32[3,4] parameter(1)
+
+      ROOT clamp.res = f32[3,4] clamp(arg.1, arg.0, arg.1)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_FALSE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+}
+
 }  // namespace
 }  // namespace xla

@@ -4826,6 +4826,47 @@ absl::Status AlgebraicSimplifierVisitor::HandleClamp(HloInstruction* clamp) {
     return absl::OkStatus();
   }
 
+  // CS526
+  // clamp(x, x, y) -> min(x, y)
+  VLOG(10) << "Trying to transform clamp(x, x, y) -> min(x, y): "
+           << clamp->ToString();
+  if (clamp_lower_bound == to_clamp) {
+    if (SameShape(to_clamp, clamp_upper_bound)) {
+      TF_ASSIGN_OR_RETURN(
+          auto new_min,
+          MakeBinaryHlo(HloOpcode::kMinimum, to_clamp, clamp_upper_bound));
+      TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, new_min));
+      return absl::OkStatus();
+    } else if (ShapeUtil::IsScalar(clamp_upper_bound->shape())) {
+      auto broadcasted_upper_bound =
+          MakeBroadcastHlo(clamp_upper_bound, {}, to_clamp->shape());
+      TF_ASSIGN_OR_RETURN(auto new_min,
+                          MakeBinaryHlo(HloOpcode::kMinimum, to_clamp,
+                                        broadcasted_upper_bound));
+      TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, new_min));
+      return absl::OkStatus();
+    }
+    return absl::OkStatus();
+  }
+
+  // CS526
+  // clamp(y, x, y) -> y
+  // Not implemented for floating point types to avoid NaN issues.
+  VLOG(10) << "Trying to transform clamp(y, x, y) -> y: " << clamp->ToString();
+  if (clamp_lower_bound == clamp_upper_bound &&
+      !primitive_util::IsFloatingPointType(clamp->shape().element_type())) {
+    if (SameShape(to_clamp, clamp_upper_bound)) {
+      TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, clamp_upper_bound));
+      return absl::OkStatus();
+    } else if (ShapeUtil::IsScalar(clamp_upper_bound->shape())) {
+      auto broadcasted_upper_bound =
+          MakeBroadcastHlo(clamp_upper_bound, {}, to_clamp->shape());
+      TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, broadcasted_upper_bound));
+      return absl::OkStatus();
+    }
+    return absl::OkStatus();
+  }
+
   return absl::OkStatus();
 }
 
