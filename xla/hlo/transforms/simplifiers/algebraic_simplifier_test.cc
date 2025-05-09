@@ -13470,9 +13470,9 @@ TEST_F(AlgebraicSimplifierTest, Xor)
   const char* kModuleStr = R"(
     HloModule m
     test {
-      x = f32[8] parameter(0)
-      xor_x = f32[8] xor(x, x)
-      ROOT out = f32[8] xor(xor_x, x)
+      x = s32[8] parameter(0)
+      xor_x = s32[8] xor(x, x)
+      ROOT out = s32[8] xor(xor_x, x)
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
