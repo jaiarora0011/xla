@@ -5159,6 +5159,31 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
                                      MakeScalarLike(lhs, 1), lhs));
   }
 
+  {
+    // CS526
+    // Implementing Mul(Pad(X, a, S_l, S_h, S_i), b) ==> Pad(Mul(X, b), a * b, S_l, S_h, S_i)
+    HloInstruction* x; 
+    HloInstruction* padding_value;
+    HloInstruction* padding_config;
+    HloInstruction *lhs, *rhs;
+    if (Match(multiply, m::Multiply(m::Op(&lhs), m::Op(&rhs))) &&
+        Match(lhs, m::Pad(&x, m::Op(&padding_value), m::Op(&padding_config))))
+    {
+      HloInstruction* new_mul =
+          multiply->AddInstruction(HloInstruction::CreateBinary(
+              x->shape(), HloOpcode::kMultiply, x, rhs));
+      HloInstruction* new_padding_value =
+          multiply->AddInstruction(HloInstruction::CreateBinary(
+              padding_value->shape(), HloOpcode::kMultiply, padding_value,
+              rhs));
+      HloInstruction* new_pad = multiply->AddInstruction(
+          HloInstruction::CreatePad(
+              multiply->shape(), new_mul, new_padding_value,
+              padding_config->padding_config()));
+      return ReplaceInstruction(multiply, new_pad);
+    }
+  }
+
   return TryToReorderConvAddMultiply(multiply);
 }
 

@@ -13560,6 +13560,26 @@ TEST_F(AlgebraicSimplifierTest, SelectAddAdd)
                                 m::Select(m::Parameter(0), m::Parameter(3), m::Parameter(4)))));
 }
 
+TEST_F(AlgebraicSimplifierTest, MulPad)
+{
+  // Testing Mul(Pad(X, a, S_l, S_h, S_i), b) ==> Pad(Mul(X, b), a * b, S_l, S_h, S_i)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      a = f32[] parameter(1)
+      b = f32[10] parameter(3)
+      pad_a = f32[10] pad(x, a), padding=1_1x0_0x0_0
+      ROOT mul = f32[10] multiply(pad_a, b)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Pad(m::Multiply(m::Parameter(0), m::Parameter(3)), m::Parameter(1))));
+}
+
 }  // namespace
 }  // namespace xla
 
