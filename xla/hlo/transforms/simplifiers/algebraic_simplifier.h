@@ -550,6 +550,16 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
 
   absl::Status HandleMap(HloInstruction* map) override;
 
+  absl::Status HandleXor(HloInstruction* logical_xor) override;
+
+  absl::Status HandleShiftRightLogical(
+      HloInstruction* shift_right_logical) override;
+
+  absl::Status HandleShiftRightArithmetic(
+      HloInstruction* shift_right_arithmetic) override;
+
+  absl::Status HandleShiftLeft(HloInstruction* shift_left) override;
+
   // Runs the visitor on a computation.
   bool Run(HloComputation* computation,
            const AlgebraicSimplifierOptions& options,

@@ -1223,6 +1223,18 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
   return absl::OkStatus();
 }
 
+absl::Status AlgebraicSimplifierVisitor::HandleXor(HloInstruction* xor_op) {
+  HloInstruction *lhs, *rhs;
+  CHECK(Match(xor_op, m::Xor(m::Op(&lhs), m::Op(&rhs))));
+
+  // CS526
+  // Implement Binary(Xor, A, A) ==> Constant(0, shape(A))
+  if (Match(lhs, m::Op().Is(rhs))) {
+    return ReplaceInstruction(xor_op, MakeScalarLike(xor_op, false));
+  }
+
+}
+
 absl::StatusOr<bool> AlgebraicSimplifierVisitor::TrySimplifyTautologicalCompare(
     HloInstruction* conjunction) {
   HloInstruction *lhs, *rhs;

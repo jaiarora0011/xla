@@ -13464,6 +13464,24 @@ TEST_F(AlgebraicSimplifierTest, MaxAddAdd)
               GmockMatch(m::Add(m::Maximum(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
 }
 
+TEST_F(AlgebraicSimplifierTest, Xor)
+{
+  // Testing Binary(Xor, A, A) ==> Constant(0, shape(A))
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      xor_x = f32[8] xor(x, x)
+      ROOT out = f32[8] xor(xor_x, x)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Broadcast(m::ConstantScalar(0))));
+}
+
 }  // namespace
 }  // namespace xla
 
