@@ -8938,6 +8938,27 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
     return absl::OkStatus();
   }
 
+  // CS526
+  // select(pad(P, _), pad(X, v), pad(Y, v)) -> pad(select(P, X, Y), v)
+  VLOG(10)
+      << "select(pad(P, _), pad(X, v), pad(Y, v)) -> pad(select(P, X, Y), v): "
+      << select->ToString();
+  HloInstruction *val, *p;
+  if (Match(pred, m::Pad(m::Op(&p), m::Op())) &&
+      Match(lhs, m::Pad(m::Op(&x), m::Op(&val))) &&
+      Match(rhs, m::Pad(m::Op(&y), m::Op().Is(val))) &&
+      ShapeUtil::CompatibleIgnoringElementType(p->shape(), x->shape()) &&
+      SameShape(x, y) &&
+      SamePaddingConfig(pred->padding_config(), lhs->padding_config()) &&
+      SamePaddingConfig(lhs->padding_config(), rhs->padding_config())) {
+    TF_ASSIGN_OR_RETURN(auto new_select, MakeSelectHlo(p, x, y));
+    TF_ASSIGN_OR_RETURN(
+        auto new_pad,
+        MakePadHlo(new_select, lhs->mutable_operand(1), lhs->padding_config()));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(select, new_pad));
+    return absl::OkStatus();
+  }
+
   return absl::OkStatus();
 }
 

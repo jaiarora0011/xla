@@ -13358,5 +13358,29 @@ TEST_F(AlgebraicSimplifierTest, MulPadNegativeTest) {
   ASSERT_FALSE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
 }
 
+TEST_F(AlgebraicSimplifierTest, SelectPadTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.p = pred[3,4] parameter(0)
+      arg.x = s8[3,4] parameter(1)
+      arg.y = s8[3,4] parameter(2)
+
+      pad.val = s8[] constant(12)
+      true.val = pred[] constant(true)
+      pad.p = pred[10,7] pad(arg.p, true.val), padding=1_2_2x2_1_0
+      pad.x = s8[10,7] pad(arg.x, pad.val), padding=1_2_2x2_1_0
+      pad.y = s8[10,7] pad(arg.y, pad.val), padding=1_2_2x2_1_0
+      ROOT select.res = s8[10,7] select(pad.p, pad.x, pad.y)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Pad(
+                  m::Select(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
+                  m::ConstantScalar(12))));
+}
+
 }  // namespace
 }  // namespace xla
