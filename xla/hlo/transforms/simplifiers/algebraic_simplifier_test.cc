@@ -13382,5 +13382,19 @@ TEST_F(AlgebraicSimplifierTest, SelectPadTest) {
                   m::ConstantScalar(12))));
 }
 
+TEST_F(AlgebraicSimplifierTest, ReverseIotaTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      iota.0 = s8[3,4,5] iota(), iota_dimension=0
+      ROOT rev.res = s8[3,4,5] reverse(iota.0), dimensions={1}
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Iota().WithShape(S8, {3, 4, 5})));
+}
+
 }  // namespace
 }  // namespace xla

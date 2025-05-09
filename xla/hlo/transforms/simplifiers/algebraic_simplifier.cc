@@ -6644,6 +6644,20 @@ absl::Status AlgebraicSimplifierVisitor::HandleReverse(
       }
     }
   }
+
+  // CS526
+  // reverse(iota(), dims) -> iota() if iota_dimension is not in dims
+  VLOG(10) << "Trying to simplify reverse of iota: " << reverse->ToString();
+  HloInstruction* iota;
+  if (Match(reverse, m::Reverse(m::Iota(&iota)))) {
+    HloIotaInstruction* iota_inst = Cast<HloIotaInstruction>(iota);
+    int64_t iota_dim = iota_inst->iota_dimension();
+    if (!absl::c_linear_search(reverse->dimensions(), iota_dim) &&
+        ReplaceInstructionIfCompatible(reverse, iota)) {
+      return absl::OkStatus();
+    }
+  }
+
   return absl::OkStatus();
 }
 
