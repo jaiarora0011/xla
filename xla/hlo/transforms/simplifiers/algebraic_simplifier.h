@@ -712,6 +712,9 @@ class AlgebraicSimplifierVisitor : public DfsHloRewriteVisitor {
   // Same as above but takes shape arguments directly.
   bool SameShape(const Shape& lhs, const Shape& rhs) const;
 
+  // Returns whether the two padding configs are the same
+  bool SamePaddingConfig(const PaddingConfig& a, const PaddingConfig& b) const;
+
   // Attempts to sink broadcasts to after element-wise operations if all
   // operands of that element-wise operation are compatible broadcasts. Returns
   // whether a change was made.

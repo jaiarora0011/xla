@@ -597,6 +597,21 @@ bool AlgebraicSimplifierVisitor::SameShape(const Shape& lhs,
   }
 }
 
+bool AlgebraicSimplifierVisitor::SamePaddingConfig(
+    const PaddingConfig& a, const PaddingConfig& b) const {
+  if (a.dimensions_size() != b.dimensions_size()) return false;
+  for (int i = 0; i < a.dimensions_size(); ++i) {
+    const auto& dim_a = a.dimensions(i);
+    const auto& dim_b = b.dimensions(i);
+    if (dim_a.edge_padding_low() != dim_b.edge_padding_low() ||
+        dim_a.edge_padding_high() != dim_b.edge_padding_high() ||
+        dim_a.interior_padding() != dim_b.interior_padding()) {
+      return false;
+    }
+  }
+  return true;
+}
+
 namespace {
 
 bool IsOpCodeMultiplyCommutative(HloOpcode opcode) {
@@ -1179,6 +1194,24 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
     TF_RETURN_IF_ERROR(lhs->ReplaceOperandWith(0, new_operand));
     return ReplaceInstruction(add, lhs);
   }
+
+  // CS526
+  // pad(X, v) + pad(Y, v) -> pad(X + Y, v)
+  VLOG(10) << "Trying to transform pad(X) + pad(Y) to pad(X + Y): "
+           << add->ToString();
+  HloInstruction *pad_lhs, *pad_rhs, *x, *y;
+  if (Match(lhs, m::Pad(&pad_lhs, m::Op(&x), m::ConstantScalar(0))) &&
+      Match(rhs, m::Pad(&pad_rhs, m::Op(&y), m::ConstantScalar(0))) &&
+      SameShape(x, y) &&
+      SamePaddingConfig(pad_lhs->padding_config(), pad_rhs->padding_config())) {
+    TF_ASSIGN_OR_RETURN(auto new_add, MakeBinaryHlo(HloOpcode::kAdd, x, y));
+    TF_ASSIGN_OR_RETURN(auto new_pad,
+                        MakePadHlo(new_add, pad_lhs->mutable_operand(1),
+                                   pad_lhs->padding_config()));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(add, new_pad));
+    return absl::OkStatus();
+  }
+
   return absl::OkStatus();
 }
 
@@ -2159,6 +2192,24 @@ absl::Status AlgebraicSimplifierVisitor::HandleSubtract(HloInstruction* sub) {
     return ReplaceInstruction(sub, MakeScalarLike(sub, 0));
   }
 
+  // CS526
+  // pad(X, v) - pad(Y, v) -> pad(X - Y, v) if v = 0
+  VLOG(10) << "Trying to transform pad(X) - pad(Y) to pad(X - Y): "
+           << sub->ToString();
+  HloInstruction *pad_lhs, *pad_rhs, *x, *y;
+  if (Match(lhs, m::Pad(&pad_lhs, m::Op(&x), m::ConstantScalar(0))) &&
+      Match(rhs, m::Pad(&pad_rhs, m::Op(&y), m::ConstantScalar(0))) &&
+      SameShape(x, y) &&
+      SamePaddingConfig(pad_lhs->padding_config(), pad_rhs->padding_config())) {
+    TF_ASSIGN_OR_RETURN(auto new_sub,
+                        MakeBinaryHlo(HloOpcode::kSubtract, x, y));
+    TF_ASSIGN_OR_RETURN(auto new_pad,
+                        MakePadHlo(new_sub, pad_lhs->mutable_operand(1),
+                                   pad_lhs->padding_config()));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(sub, new_pad));
+    return absl::OkStatus();
+  }
+
   return absl::OkStatus();
 }
 namespace {
@@ -2307,6 +2358,24 @@ absl::Status AlgebraicSimplifierVisitor::HandleDivide(HloInstruction* divide) {
     return ReplaceWithNewInstruction(
         divide, HloInstruction::CreateBinary(sqrt->shape(),
                                              HloOpcode::kMultiply, a, sqrt));
+  }
+
+  // CS526
+  // pad(X, v) / pad(Y, v) -> pad(X / Y, v) if v = 1
+  VLOG(10) << "Trying to transform pad(X) / pad(Y) to pad(X / Y): "
+           << divide->ToString();
+  CHECK(Match(divide, m::Divide(m::Op(&a), m::Op(&b))));
+  HloInstruction *pad_lhs, *pad_rhs, *x, *y;
+  if (Match(a, m::Pad(&pad_lhs, m::Op(&x), m::ConstantScalar(1))) &&
+      Match(b, m::Pad(&pad_rhs, m::Op(&y), m::ConstantScalar(1))) &&
+      SameShape(x, y) &&
+      SamePaddingConfig(pad_lhs->padding_config(), pad_rhs->padding_config())) {
+    TF_ASSIGN_OR_RETURN(auto new_div, MakeBinaryHlo(HloOpcode::kDivide, x, y));
+    TF_ASSIGN_OR_RETURN(auto new_pad,
+                        MakePadHlo(new_div, pad_lhs->mutable_operand(1),
+                                   pad_lhs->padding_config()));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(divide, new_pad));
+    return absl::OkStatus();
   }
 
   // Simplifying integral division would produce unexpected results.
@@ -4680,7 +4749,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleMinimum(
                                           m::ConstantEffectiveScalar()))))) {
     TF_ASSIGN_OR_RETURN(auto clamp,
                         MinMaxToClamp(clamp_lower_bound_bcast, to_clamp,
-                                      clamp_upper_bound_bcast,    simplifier_));
+                                      clamp_upper_bound_bcast, simplifier_));
     if (clamp) {
       return ReplaceWithNewInstruction(minimum, std::move(clamp));
     }
@@ -5028,6 +5097,25 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
     TF_ASSIGN_OR_RETURN(auto new_mul,
                         MakeBinaryHlo(HloOpcode::kMultiply, x, y));
     TF_RETURN_IF_ERROR(ReplaceInstruction(multiply, new_mul));
+    return absl::OkStatus();
+  }
+
+  // CS526
+  // pad(X, v) * pad(Y, v) -> pad(X * Y, v) if v = 1
+  VLOG(10) << "Trying to transform pad(X) * pad(Y) to pad(X * Y): "
+           << multiply->ToString();
+  HloInstruction *pad_lhs, *pad_rhs, *val;
+  if (Match(lhs, m::Pad(&pad_lhs, m::Op(&x), m::Op(&val))) &&
+      Match(rhs, m::Pad(&pad_rhs, m::Op(&y), m::Op().Is(val))) &&
+      (Match(val, m::ConstantScalar(0)) || Match(val, m::ConstantScalar(1))) &&
+      SameShape(x, y) &&
+      SamePaddingConfig(pad_lhs->padding_config(), pad_rhs->padding_config())) {
+    TF_ASSIGN_OR_RETURN(auto new_mul,
+                        MakeBinaryHlo(HloOpcode::kMultiply, x, y));
+    TF_ASSIGN_OR_RETURN(auto new_pad,
+                        MakePadHlo(new_mul, pad_lhs->mutable_operand(1),
+                                   pad_lhs->padding_config()));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(multiply, new_pad));
     return absl::OkStatus();
   }
 

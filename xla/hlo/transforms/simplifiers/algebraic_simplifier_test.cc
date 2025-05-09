@@ -13241,5 +13241,122 @@ TEST_F(AlgebraicSimplifierTest, MinZeroAbsF32NegativeTest) {
   ASSERT_FALSE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
 }
 
+TEST_F(AlgebraicSimplifierTest, AddPadTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = s8[3,4] parameter(0)
+      arg.1 = s8[3,4] parameter(1)
+
+      pad.val = s8[] constant(0)
+      pad.0 = s8[5,6] pad(arg.0, pad.val), padding=1_1x1_1
+      pad.1 = s8[5,6] pad(arg.1, pad.val), padding=1_1x1_1
+      ROOT add.2 = s8[5,6] add(pad.0, pad.1)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Pad(m::Add(m::Parameter(0), m::Parameter(1)),
+                                m::ConstantScalar(0))));
+}
+
+TEST_F(AlgebraicSimplifierTest, AddPadInteriorTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = s8[3,4] parameter(0)
+      arg.1 = s8[3,4] parameter(1)
+
+      pad.val = s8[] constant(0)
+      pad.0 = s8[10,7] pad(arg.0, pad.val), padding=1_2_2x2_1_0
+      pad.1 = s8[10,7] pad(arg.1, pad.val), padding=1_2_2x2_1_0
+      ROOT add.2 = s8[10,7] add(pad.0, pad.1)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Pad(m::Add(m::Parameter(0), m::Parameter(1)),
+                                m::ConstantScalar(0))));
+}
+
+TEST_F(AlgebraicSimplifierTest, SubPadTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = s8[3,4] parameter(0)
+      arg.1 = s8[3,4] parameter(1)
+
+      pad.val = s8[] constant(0)
+      pad.0 = s8[10,7] pad(arg.0, pad.val), padding=1_2_2x2_1_0
+      pad.1 = s8[10,7] pad(arg.1, pad.val), padding=1_2_2x2_1_0
+      ROOT add.2 = s8[10,7] subtract(pad.0, pad.1)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Pad(m::Subtract(m::Parameter(0), m::Parameter(1)),
+                                m::ConstantScalar(0))));
+}
+
+TEST_F(AlgebraicSimplifierTest, DivPadTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = s8[3,4] parameter(0)
+      arg.1 = s8[3,4] parameter(1)
+
+      pad.val = s8[] constant(1)
+      pad.0 = s8[10,7] pad(arg.0, pad.val), padding=1_2_2x2_1_0
+      pad.1 = s8[10,7] pad(arg.1, pad.val), padding=1_2_2x2_1_0
+      ROOT add.2 = s8[10,7] divide(pad.0, pad.1)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Pad(m::Divide(m::Parameter(0), m::Parameter(1)),
+                                m::ConstantScalar(1))));
+}
+
+TEST_F(AlgebraicSimplifierTest, MulPadTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = s8[3,4] parameter(0)
+      arg.1 = s8[3,4] parameter(1)
+
+      pad.val = s8[] constant(1)
+      pad.0 = s8[10,7] pad(arg.0, pad.val), padding=1_2_2x2_1_0
+      pad.1 = s8[10,7] pad(arg.1, pad.val), padding=1_2_2x2_1_0
+      ROOT add.2 = s8[10,7] multiply(pad.0, pad.1)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Pad(m::Multiply(m::Parameter(0), m::Parameter(1)),
+                                m::ConstantScalar(1))));
+}
+
+TEST_F(AlgebraicSimplifierTest, MulPadNegativeTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.0 = s8[3,4] parameter(0)
+      arg.1 = s8[3,4] parameter(1)
+
+      pad.val = s8[] constant(12)
+      pad.0 = s8[10,7] pad(arg.0, pad.val), padding=1_2_2x2_1_0
+      pad.1 = s8[10,7] pad(arg.1, pad.val), padding=1_2_2x2_1_0
+      ROOT add.2 = s8[10,7] multiply(pad.0, pad.1)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_FALSE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+}
+
 }  // namespace
 }  // namespace xla
