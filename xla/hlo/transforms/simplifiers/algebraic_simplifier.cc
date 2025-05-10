@@ -8648,6 +8648,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleReduce(HloInstruction* hlo) {
 
   // CS526
   // reduce(iota(), *, dims) -> 0 if iota_dim is in dims
+  VLOG(10) << "Trying to simplify reduce(iota, *)" << reduce->ToString();
   if (arg->opcode() == HloOpcode::kIota &&
       Match(reduce->to_apply()->root_instruction(),
             m::MultiplyAnyOrder(m::Parameter(0), m::Parameter(1)))) {
@@ -8656,10 +8657,43 @@ absl::Status AlgebraicSimplifierVisitor::HandleReduce(HloInstruction* hlo) {
     // We need the iota dimension to be in the reduction dimension
     // and the size of the iota dimension to be > 0.
     // Otherwise, the result needs to be replaced with init_value and
-    // not 0
+    // not 0. This would be covered by existing simplifications.
     if (absl::c_linear_search(reduce->dimensions(), iota_dim) &&
         arg->shape().dimensions(iota_dim) > 0) {
       return ReplaceInstruction(reduce, MakeScalarLike(reduce, 0));
+    }
+  }
+
+  // CS526
+  // reduce(iota(), +, dims) -> const(...) if iota_dim is in dims
+  VLOG(10) << "Trying to simplify reduce(iota, +)" << reduce->ToString();
+  if (arg->opcode() == HloOpcode::kIota &&
+      Match(reduce->to_apply()->root_instruction(),
+            m::AddAnyOrder(m::Parameter(0), m::Parameter(1))) &&
+      IsAll(init_value, 0)) {
+    HloIotaInstruction* iota = Cast<HloIotaInstruction>(arg);
+    int64_t iota_dim = iota->iota_dimension();
+    int64_t dim_prod = 1;
+    bool iota_dim_found = false;
+    bool all_non_zero = true;
+    for (const int64_t dim : dimensions) {
+      if (arg->shape().dimensions(dim) == 0) {
+        // If the dimension is 0, then the reduction needs to be replaced
+        // with init_value and not 0. This would be covered by existing
+        // simplifications.
+        all_non_zero = false;
+        break;
+      }
+      if (dim == iota_dim) {
+        iota_dim_found = true;
+        int64_t iota_dim_size = arg->shape().dimensions(dim);
+        dim_prod *= iota_dim_size * (iota_dim_size - 1) / 2;
+      } else {
+        dim_prod *= arg->shape().dimensions(dim);
+      }
+    }
+    if (iota_dim_found && all_non_zero) {
+      return ReplaceInstruction(reduce, MakeScalarLike(reduce, dim_prod));
     }
   }
 

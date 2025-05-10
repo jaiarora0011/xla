@@ -13729,5 +13729,66 @@ TEST_F(AlgebraicSimplifierTest, ReduceMulIotaTest2) {
               GmockMatch(m::Broadcast(m::ConstantScalar(0))));
 }
 
+TEST_F(AlgebraicSimplifierTest, ReduceAddIotaTest1) {
+  const char* kModuleStr = R"(
+    HloModule m
+    sum_red {
+      param.0 = s32[] parameter(0)
+      param.1 = s32[] parameter(1)
+      ROOT add.0 = s32[] add(param.0, param.1)
+    }
+
+    ENTRY main {
+      iota.0 = s32[10,3,4] iota(), iota_dimension=0
+      zero = s32[] constant(0)
+      ROOT reduce.res = s32[3,4] reduce(iota.0, zero), dimensions={0}, to_apply=sum_red
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Broadcast(m::ConstantScalar(45))));
+}
+
+TEST_F(AlgebraicSimplifierTest, ReduceAddIotaTest2) {
+  const char* kModuleStr = R"(
+    HloModule m
+    sum_red {
+      param.0 = s32[] parameter(0)
+      param.1 = s32[] parameter(1)
+      ROOT add.0 = s32[] add(param.0, param.1)
+    }
+
+    ENTRY main {
+      iota.0 = s32[10,3,4] iota(), iota_dimension=0
+      zero = s32[] constant(0)
+      ROOT reduce.res = s32[4] reduce(iota.0, zero), dimensions={0,1}, to_apply=sum_red
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Broadcast(m::ConstantScalar(135))));
+}
+
+TEST_F(AlgebraicSimplifierTest, ReduceAddIotaNegativeTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    sum_red {
+      param.0 = s32[] parameter(0)
+      param.1 = s32[] parameter(1)
+      ROOT add.0 = s32[] add(param.0, param.1)
+    }
+
+    ENTRY main {
+      iota.0 = s32[10,3,4] iota(), iota_dimension=0
+      two = s32[] constant(2)
+      ROOT reduce.res = s32[10] reduce(iota.0, two), dimensions={1,2}, to_apply=sum_red
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_FALSE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+}
+
 }  // namespace
 }  // namespace xla
