@@ -4572,6 +4572,29 @@ absl::StatusOr<std::unique_ptr<HloInstruction>> MinMaxToClamp(
   }
   return std::unique_ptr<HloInstruction>();
 }
+
+absl::StatusOr<bool> CompareLiterals(const Literal& lhs, const Literal& rhs,
+                                     ComparisonDirection direction,
+                                     AlgebraicSimplifier* simplifier) {
+  TF_ASSIGN_OR_RETURN(Literal lhs_reshaped, lhs.Reshape({}));
+  TF_ASSIGN_OR_RETURN(Literal rhs_reshaped, rhs.Reshape({}));
+  std::unique_ptr<HloInstruction> lower_bound_instr =
+      HloInstruction::CreateConstant(std::move(lhs_reshaped));
+  std::unique_ptr<HloInstruction> upper_bound_instr =
+      HloInstruction::CreateConstant(std::move(rhs_reshaped));
+
+  Shape compare_shape =
+      ShapeUtil::ChangeElementType(lower_bound_instr->shape(), PRED);
+  simplifier->UpdateLayout(&compare_shape);
+  std::unique_ptr<HloInstruction> cloned_instruction =
+      HloInstruction::CreateCompare(compare_shape, lower_bound_instr.get(),
+                                    upper_bound_instr.get(), direction);
+
+  HloEvaluator evaluator;
+  TF_ASSIGN_OR_RETURN(auto result,
+                      evaluator.Evaluate(cloned_instruction.get()));
+  return result.IsAll(true);
+}
 }  // namespace
 
 bool AlgebraicSimplifierVisitor::IsNondecreasingSublinear(
@@ -4902,7 +4925,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleClamp(HloInstruction* clamp) {
       TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, new_min));
       return absl::OkStatus();
     }
-    return absl::OkStatus();
   }
 
   // CS526
@@ -4920,7 +4942,59 @@ absl::Status AlgebraicSimplifierVisitor::HandleClamp(HloInstruction* clamp) {
       TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, broadcasted_upper_bound));
       return absl::OkStatus();
     }
-    return absl::OkStatus();
+  }
+
+  // CS526
+  // clamp(minO, clamp(minI, x, maxI), maxO) -> clamp(minO, x, maxO)
+  //            where minI <= minO and maxO <= maxI
+  // clamp(minO, clamp(minI, x, maxI), maxO) -> clamp(minI, x, maxI)
+  //            where [minI, maxI] in [minO, maxO]
+  VLOG(10) << "Trying to simplify clamp(minO, clamp(minI, x, maxI), maxO): "
+           << clamp->ToString();
+  HloInstruction *minO, *minI, *maxI, *maxO, *minI_bcast, *maxI_bcast;
+  if (Match(clamp_lower_bound,
+            m::Broadcast(m::ConstantEffectiveScalar(&minO))) &&
+      Match(clamp_upper_bound,
+            m::Broadcast(m::ConstantEffectiveScalar(&maxO))) &&
+      Match(to_clamp,
+            m::Clamp(m::Op(&minI_bcast), m::Op(&x), m::Op(&maxI_bcast))) &&
+      Match(minI_bcast, m::Broadcast(m::ConstantEffectiveScalar(&minI))) &&
+      Match(maxI_bcast, m::Broadcast(m::ConstantEffectiveScalar(&maxI)))) {
+    const Literal& minO_literal = Cast<HloConstantInstruction>(minO)->literal();
+    const Literal& minI_literal = Cast<HloConstantInstruction>(minI)->literal();
+    const Literal& maxI_literal = Cast<HloConstantInstruction>(maxI)->literal();
+    const Literal& maxO_literal = Cast<HloConstantInstruction>(maxO)->literal();
+    TF_ASSIGN_OR_RETURN(bool minI_le_minO,
+                        CompareLiterals(minI_literal, minO_literal,
+                                        ComparisonDirection::kLe, simplifier_));
+    TF_ASSIGN_OR_RETURN(bool maxO_le_maxI,
+                        CompareLiterals(maxO_literal, maxI_literal,
+                                        ComparisonDirection::kLe, simplifier_));
+    if (minI_le_minO && maxO_le_maxI) {
+      auto new_clamp = clamp->AddInstruction(HloInstruction::CreateTernary(
+          to_clamp->shape(), HloOpcode::kClamp, clamp_lower_bound, x,
+          clamp_upper_bound));
+      TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, new_clamp));
+      return absl::OkStatus();
+    }
+    TF_ASSIGN_OR_RETURN(bool minI_le_maxI,
+                        CompareLiterals(minI_literal, maxI_literal,
+                                        ComparisonDirection::kLe, simplifier_));
+    TF_ASSIGN_OR_RETURN(bool minO_le_maxO,
+                        CompareLiterals(minO_literal, maxO_literal,
+                                        ComparisonDirection::kLe, simplifier_));
+    TF_ASSIGN_OR_RETURN(bool minO_le_minI,
+                        CompareLiterals(minO_literal, minI_literal,
+                                        ComparisonDirection::kLe, simplifier_));
+    TF_ASSIGN_OR_RETURN(bool maxI_le_maxO,
+                        CompareLiterals(maxI_literal, maxO_literal,
+                                        ComparisonDirection::kLe, simplifier_));
+    if (minI_le_maxI && minO_le_maxO && minO_le_minI && maxI_le_maxO) {
+      auto new_clamp = clamp->AddInstruction(HloInstruction::CreateTernary(
+          to_clamp->shape(), HloOpcode::kClamp, minI_bcast, x, maxI_bcast));
+      TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, new_clamp));
+      return absl::OkStatus();
+    }
   }
 
   return absl::OkStatus();

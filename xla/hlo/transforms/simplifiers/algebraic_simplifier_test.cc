@@ -13790,5 +13790,61 @@ TEST_F(AlgebraicSimplifierTest, ReduceAddIotaNegativeTest) {
   ASSERT_FALSE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
 }
 
+TEST_F(AlgebraicSimplifierTest, NestedClampOuterTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    ENTRY main {
+      arg.0 = s8[3,4] parameter(0)
+
+      one = s8[] constant(1)
+      two = s8[] constant(2)
+      three = s8[] constant(3)
+      four = s8[] constant(4)
+
+      bcast.one = s8[3,4] broadcast(one), dimensions={}
+      bcast.two = s8[3,4] broadcast(two), dimensions={}
+      bcast.three = s8[3,4] broadcast(three), dimensions={}
+      bcast.four = s8[3,4] broadcast(four), dimensions={}
+
+      clamp.1 = s8[3,4] clamp(bcast.one, arg.0, bcast.four)
+      ROOT clamp.2 = s8[3,4] clamp(bcast.two, clamp.1, bcast.three)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Clamp(m::Broadcast(m::ConstantScalar(2)), m::Parameter(0),
+                          m::Broadcast(m::ConstantScalar(3)))));
+}
+
+TEST_F(AlgebraicSimplifierTest, NestedClampInnerTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    ENTRY main {
+      arg.0 = s8[3,4] parameter(0)
+
+      one = s8[] constant(1)
+      two = s8[] constant(2)
+      three = s8[] constant(3)
+      four = s8[] constant(4)
+
+      bcast.one = s8[3,4] broadcast(one), dimensions={}
+      bcast.two = s8[3,4] broadcast(two), dimensions={}
+      bcast.three = s8[3,4] broadcast(three), dimensions={}
+      bcast.four = s8[3,4] broadcast(four), dimensions={}
+
+      clamp.1 = s8[3,4] clamp(bcast.two, arg.0, bcast.three)
+      ROOT clamp.2 = s8[3,4] clamp(bcast.one, clamp.1, bcast.four)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Clamp(m::Broadcast(m::ConstantScalar(2)), m::Parameter(0),
+                          m::Broadcast(m::ConstantScalar(3)))));
+}
+
 }  // namespace
 }  // namespace xla
