@@ -5165,21 +5165,32 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
     HloInstruction* x; 
     HloInstruction* padding_value;
     HloInstruction* padding_config;
-    HloInstruction *lhs, *rhs;
+    HloInstruction* lhs; 
+    HloInstruction* rhs;
+    HloInstruction* a;
+    HloInstruction* b;
+
     if (Match(multiply, m::Multiply(m::Op(&lhs), m::Op(&rhs))) &&
-        Match(lhs, m::Pad(&x, m::Op(&padding_value), m::Op(&padding_config))))
+        Match(lhs, m::Pad(&lhs, m::Op(&x), m::Op(&padding_value))) &&
+        (Match(rhs, m::ConstantEffectiveScalar(&b)) || Match(rhs, m::Broadcast(m::ConstantScalar(&b))))
+        && Match(padding_value, m::ConstantScalar(&a)))
     {
+      HloInstruction* broadcast_b =
+      multiply->AddInstruction(HloInstruction::CreateBroadcast(
+        x->shape(), b, {}));
+
       HloInstruction* new_mul =
           multiply->AddInstruction(HloInstruction::CreateBinary(
-              x->shape(), HloOpcode::kMultiply, x, rhs));
-      HloInstruction* new_padding_value =
+              x->shape(), HloOpcode::kMultiply, x, broadcast_b));
+  
+      HloInstruction* new_padding_value = 
           multiply->AddInstruction(HloInstruction::CreateBinary(
-              padding_value->shape(), HloOpcode::kMultiply, padding_value,
-              rhs));
+              a->shape(), HloOpcode::kMultiply, a, b));
+
       HloInstruction* new_pad = multiply->AddInstruction(
           HloInstruction::CreatePad(
               multiply->shape(), new_mul, new_padding_value,
-              padding_config->padding_config()));
+              lhs->padding_config()));
       return ReplaceInstruction(multiply, new_pad);
     }
   }

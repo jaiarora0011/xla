@@ -13566,18 +13566,21 @@ TEST_F(AlgebraicSimplifierTest, MulPad)
   const char* kModuleStr = R"(
     HloModule m
     test {
-      x = f32[8] parameter(0)
-      a = f32[] parameter(1)
-      b = f32[10] parameter(3)
-      pad_a = f32[10] pad(x, a), padding=1_1x0_0x0_0
-      ROOT mul = f32[10] multiply(pad_a, b)
+      arg.x = s32[3,4] parameter(0)
+
+      constant.a = s32[] constant(2)
+      constant.b = s32[] constant(3)
+      pad.x = s32[8,11] pad(arg.x, constant.a), padding=2_3x3_4
+      bcast.b = s32[8,11] broadcast(constant.b), dimensions={}
+      ROOT mul.res = s32[8,11] multiply(pad.x, bcast.b)
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Pad(m::Multiply(m::Parameter(0), m::Parameter(3)), m::Parameter(1))));
+              GmockMatch(m::Pad(m::Multiply(m::Parameter(0), m::Broadcast(m::Constant())),
+                                m::Multiply(m::Constant(), m::Constant()))));
 }
 
 }  // namespace
