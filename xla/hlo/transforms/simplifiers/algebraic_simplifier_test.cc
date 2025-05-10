@@ -13706,8 +13706,11 @@ TEST_F(AlgebraicSimplifierTest, ConcatMulMul)
       arg.y = s8[5,8] parameter(1)
       arg.z = s8[10,8] parameter(2)
 
-      concat = s8[10,8] concatenate(arg.x, arg.y), dimensions={0}
-      ROOT mul = s8[10,8] multiply(concat, arg.z)
+      arg.z.slice1 = s8[5,8] slice(arg.z), slice={[0:5], [0:8]}
+      arg.z.slice2 = s8[5,8] slice(arg.z), slice={[5:10], [0:8]}
+      mul.x = s8[5,8] multiply(arg.x, arg.z.slice1)
+      mul.y = s8[5,8] multiply(arg.y, arg.z.slice2)
+      ROOT concat = s8[10,8] concatenate(mul.x, mul.y), dimensions={0}
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
