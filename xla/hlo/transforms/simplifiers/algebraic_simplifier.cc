@@ -7564,6 +7564,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleSlice(HloInstruction* slice) {
     auto slice_limits = slice->slice_limits();
     auto slice_strides = slice->slice_strides();
     auto slice_shape = slice->shape();
+
     auto add_x_slice = slice->AddInstruction(
         HloInstruction::CreateSlice(slice_shape, add_x, slice_starts,
                                     slice_limits, slice_strides));
@@ -7573,6 +7574,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleSlice(HloInstruction* slice) {
     auto add_slice = slice->AddInstruction(
         HloInstruction::CreateBinary(slice_shape, HloOpcode::kAdd,
                                      add_x_slice, add_y_slice));
+    
     simplifier_->UpdateLayout(add_slice->mutable_shape());
     return ReplaceInstruction(slice, add_slice);
   }

@@ -13643,8 +13643,7 @@ TEST_F(AlgebraicSimplifierTest, SliceAdd)
       arg.y = s32[10,10000] parameter(1)
 
       add.xy = s32[10,10000] add(arg.x, arg.y)
-      slice.xy = s32[10,10000] slice(add.xy), slice={[0:10], [0:10000]}
-      ROOT add.res = s32[10,10000] add(slice.xy, slice.xy)
+      ROOT slice.xy = s32[5,5000] slice(add.xy), slice={[0:5], [0:5000]}
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
