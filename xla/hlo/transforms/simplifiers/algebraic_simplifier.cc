@@ -8646,6 +8646,23 @@ absl::Status AlgebraicSimplifierVisitor::HandleReduce(HloInstruction* hlo) {
     }
   }
 
+  // CS526
+  // reduce(iota(), *, dims) -> 0 if iota_dim is in dims
+  if (arg->opcode() == HloOpcode::kIota &&
+      Match(reduce->to_apply()->root_instruction(),
+            m::MultiplyAnyOrder(m::Parameter(0), m::Parameter(1)))) {
+    HloIotaInstruction* iota = Cast<HloIotaInstruction>(arg);
+    int64_t iota_dim = iota->iota_dimension();
+    // We need the iota dimension to be in the reduction dimension
+    // and the size of the iota dimension to be > 0.
+    // Otherwise, the result needs to be replaced with init_value and
+    // not 0
+    if (absl::c_linear_search(reduce->dimensions(), iota_dim) &&
+        arg->shape().dimensions(iota_dim) > 0) {
+      return ReplaceInstruction(reduce, MakeScalarLike(reduce, 0));
+    }
+  }
+
   return absl::OkStatus();
 }
 

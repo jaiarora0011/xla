@@ -13687,5 +13687,47 @@ TEST_F(AlgebraicSimplifierTest, MinMinTest) {
                             m::Parameter(1))));
 }
 
+TEST_F(AlgebraicSimplifierTest, ReduceMulIotaTest1) {
+  const char* kModuleStr = R"(
+    HloModule m
+    mul_red {
+      param.0 = s32[] parameter(0)
+      param.1 = s32[] parameter(1)
+      ROOT add.0 = s32[] multiply(param.0, param.1)
+    }
+
+    ENTRY main {
+      iota.0 = s32[10,3,4] iota(), iota_dimension=0
+      one = s32[] constant(1)
+      ROOT reduce.res = s32[3,4] reduce(iota.0, one), dimensions={0}, to_apply=mul_red
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Broadcast(m::ConstantScalar(0))));
+}
+
+TEST_F(AlgebraicSimplifierTest, ReduceMulIotaTest2) {
+  const char* kModuleStr = R"(
+    HloModule m
+    mul_red {
+      param.0 = s32[] parameter(0)
+      param.1 = s32[] parameter(1)
+      ROOT add.0 = s32[] multiply(param.0, param.1)
+    }
+
+    ENTRY main {
+      iota.0 = s32[10,3,4] iota(), iota_dimension=0
+      two = s32[] constant(2)
+      ROOT reduce.res = s32[4] reduce(iota.0, two), dimensions={0,1}, to_apply=mul_red
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Broadcast(m::ConstantScalar(0))));
+}
+
 }  // namespace
 }  // namespace xla
