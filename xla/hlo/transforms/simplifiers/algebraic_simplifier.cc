@@ -2186,8 +2186,15 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
     auto pad_a_config = pad_a->padding_config();
     auto pad_b_config = pad_b->padding_config();
 
-    if (pad_a_config.dimensions_size() != pad_b_config.dimensions_size() ||  v1 != v2) {
+    if (pad_a_config.dimensions_size() != pad_b_config.dimensions_size() ||  v1 != v2 ||
+      (a->shape().dimensions_size() != b->shape().dimensions_size())) {
       return absl::OkStatus();
+    }
+
+    for (int i = 0; i < a->shape().dimensions_size(); ++i) {
+      if (i != dim && a->shape().dimensions(i) != b->shape().dimensions(i)) {
+        return absl::OkStatus();
+      }
     }
 
     auto a_shape = a->shape();
