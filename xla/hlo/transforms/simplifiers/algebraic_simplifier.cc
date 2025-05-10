@@ -1321,6 +1321,33 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
     
   }
 
+
+  // CS526 
+  // Implement C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C in {Add, Mul, Sub, Div}
+  HloInstruction* u;
+  HloInstruction* v;
+  HloInstruction* dim;
+  if (Match(lhs, m::Concatenate(m::Op(&x), m::Op(&u))) &&
+      Match(rhs, m::Concatenate(m::Op(&y), m::Op(&v))))
+  {
+    auto lhs_concat_dim = lhs->concatenate_dimension();
+    auto rhs_concat_dim = rhs->concatenate_dimension();
+    if (ShapeUtil::SameDimensions(lhs->shape(), rhs->shape()) &&
+        ShapeUtil::SameDimensions(x->shape(), y->shape()) &&
+        ShapeUtil::SameDimensions(u->shape(), v->shape()) &&
+        lhs_concat_dim == rhs_concat_dim)
+    {
+      auto inner_add1 = lhs->AddInstruction(
+          HloInstruction::CreateBinary(x->shape(), HloOpcode::kAdd, x, y));
+      auto inner_add2 = lhs->AddInstruction(
+          HloInstruction::CreateBinary(u->shape(), HloOpcode::kAdd, u, v));
+      auto concat1 = lhs->AddInstruction(
+          HloInstruction::CreateConcatenate(inner_add1->shape(), {inner_add1, inner_add2}, lhs_concat_dim));
+      return ReplaceInstruction(add, concat1);
+    }
+  }
+  
+  
   return absl::OkStatus();
 }
 
