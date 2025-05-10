@@ -13696,6 +13696,27 @@ TEST_F(AlgebraicSimplifierTest, RevDot)
               GmockMatch(m::Reverse(m::Dot(m::Parameter(0), m::Parameter(1)))));
 }
 
+TEST_F(AlgebraicSimplifierTest, ConcatMulMul)
+{
+  // Testing Concat(Mul(X, Slice(Z)), Mul(Y, Slice(Z)), dim) ==> Mul(Concat(X, Y, dim), Z)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s8[5,8] parameter(0)
+      arg.y = s8[5,8] parameter(1)
+      arg.z = s8[10,8] parameter(2)
+
+      concat = s8[10,8] concatenate(arg.x, arg.y), dimensions={0}
+      ROOT mul = s8[10,8] multiply(concat, arg.z)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Multiply(m::Concatenate(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
+}
+
 }  // namespace
 }  // namespace xla
 

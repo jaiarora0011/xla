@@ -2137,6 +2137,33 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
           }
       }
 
+
+  // CS526
+  // Implement Concat(Mul(X, Slice(Z)), Mul(Y, Slice(Z)), dim) ==> Mul(Concat(X, Y, dim), Z)
+  HloInstruction* z;
+  if (Match(operands[0], m::MultiplyAnyOrder(m::Op(&x), m::Slice(m::Op(&z)))) &&
+      Match(operands[1], m::MultiplyAnyOrder(m::Op(&y), m::Slice(m::Op().Is(z))))) {
+        auto dim = concatenate->concatenate_dimension();
+        auto x_shape = x->shape();
+        auto y_shape = y->shape();
+
+        Shape new_shape = x_shape;
+        for (int i = 0; i < new_shape.dimensions_size(); ++i) {
+          if (i == dim) {
+            new_shape.set_dimensions(i,
+              x_shape.dimensions(i) + y_shape.dimensions(i));
+          }
+        }
+        auto new_concat = operands[0]->AddInstruction(
+          HloInstruction::CreateConcatenate(
+              new_shape,
+              {x, y}, dim));
+        auto new_mul = operands[0]->AddInstruction(
+            HloInstruction::CreateBinary(
+                concatenate->shape(), HloOpcode::kMultiply, new_concat, z));
+        return ReplaceInstruction(concatenate, new_mul);
+      }
+
   if (operands.size() == 2) {
     // A binary concat with a broadcasted scalar as an operand can be converted
     // into a pad which is simpler to fold into other operations.
