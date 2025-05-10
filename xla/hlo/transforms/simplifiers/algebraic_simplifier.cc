@@ -2191,6 +2191,81 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
       }
 
   // CS526
+  // Implement Concat(Add(X, Slice(Z)), Add(Y, Slice(Z)), dim) ==> Add(Concat(X, Y, dim), Z)
+  if (Match(operands[0], m::AddAnyOrder(m::Op(&x), m::Slice(m::Op(&z)))) &&
+      Match(operands[1], m::AddAnyOrder(m::Op(&y), m::Slice(m::Op().Is(z))))) {
+        auto dim = concatenate->concatenate_dimension();
+        auto x_shape = x->shape();
+        auto y_shape = y->shape();
+
+        Shape new_shape = x_shape;
+        for (int i = 0; i < new_shape.dimensions_size(); ++i) {
+          if (i == dim) {
+            new_shape.set_dimensions(i,
+              x_shape.dimensions(i) + y_shape.dimensions(i));
+          }
+        }
+        auto new_concat = operands[0]->AddInstruction(
+          HloInstruction::CreateConcatenate(
+              new_shape,
+              {x, y}, dim));
+        auto new_add = operands[0]->AddInstruction(
+            HloInstruction::CreateBinary(
+                concatenate->shape(), HloOpcode::kAdd, new_concat, z));
+        return ReplaceInstruction(concatenate, new_add);
+      }
+
+  // CS526
+  // Implement Concat(Subtract(X, Slice(Z)), Subtract(Y, Slice(Z)), dim) ==> Subtract(Concat(X, Y, dim), Z)
+  if (Match(operands[0], m::Subtract(m::Op(&x), m::Slice(m::Op(&z)))) &&
+      Match(operands[1], m::Subtract(m::Op(&y), m::Slice(m::Op().Is(z))))) {
+        auto dim = concatenate->concatenate_dimension();
+        auto x_shape = x->shape();
+        auto y_shape = y->shape();
+
+        Shape new_shape = x_shape;
+        for (int i = 0; i < new_shape.dimensions_size(); ++i) {
+          if (i == dim) {
+            new_shape.set_dimensions(i,
+              x_shape.dimensions(i) + y_shape.dimensions(i));
+          }
+        }
+        auto new_concat = operands[0]->AddInstruction(
+          HloInstruction::CreateConcatenate(
+              new_shape,
+              {x, y}, dim));
+        auto new_subtract = operands[0]->AddInstruction(
+            HloInstruction::CreateBinary(
+                concatenate->shape(), HloOpcode::kSubtract, new_concat, z));
+        return ReplaceInstruction(concatenate, new_subtract);
+      }
+
+  // CS526
+  // Implement Concat(Divide(X, Slice(Z)), Divide(Y, Slice(Z)), dim) ==> Divide(Concat(X, Y, dim), Z)
+  if (Match(operands[0], m::Divide(m::Op(&x), m::Slice(m::Op(&z)))) &&
+      Match(operands[1], m::Divide(m::Op(&y), m::Slice(m::Op().Is(z))))) {
+        auto dim = concatenate->concatenate_dimension();
+        auto x_shape = x->shape();
+        auto y_shape = y->shape();
+
+        Shape new_shape = x_shape;
+        for (int i = 0; i < new_shape.dimensions_size(); ++i) {
+          if (i == dim) {
+            new_shape.set_dimensions(i,
+              x_shape.dimensions(i) + y_shape.dimensions(i));
+          }
+        }
+        auto new_concat = operands[0]->AddInstruction(
+          HloInstruction::CreateConcatenate(
+              new_shape,
+              {x, y}, dim));
+        auto new_divide = operands[0]->AddInstruction(
+            HloInstruction::CreateBinary(
+                concatenate->shape(), HloOpcode::kDivide, new_concat, z));
+        return ReplaceInstruction(concatenate, new_divide);
+      }
+
+  // CS526
   // Implement Concatenate(Pad(A, v, low, 0, int), Pad(B, v, 0, high, int), dim) ==> 
   // Pad(Concatenate(A, B, dim), v, low, high, int)
   // if int = 0 && low + Shape(A) >= 0 && high + Shape(B) >= 0
