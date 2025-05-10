@@ -13685,7 +13685,7 @@ TEST_F(AlgebraicSimplifierTest, RevDot)
       arg.x = s32[10,10000] parameter(0)
       arg.y = s32[10000,10] parameter(1)
 
-      rev.x = s32[10,10000] rev(arg.x), dimensions={1}
+      rev.x = s32[10,10000] reverse(arg.x), dimensions={1}
       ROOT dot.xy = s32[10,10] dot(rev.x, arg.y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
     }
   )";

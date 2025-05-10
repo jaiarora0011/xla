@@ -4355,6 +4355,10 @@ absl::Status AlgebraicSimplifierVisitor::HandleDot(HloInstruction* dot) {
   HloInstruction* x;
   HloInstruction* y;
   if (Match(dot, m::Dot(m::Reverse(&rev, m::Op(&x)), m::Op(&y)))) {
+    HloDotInstruction* dot_op = Cast<HloDotInstruction>(dot);
+    if (dot_op->sparse_operands()) {
+      return absl::OkStatus();
+    }
     auto rev_dims = rev->dimensions();
     auto dot_dims = dot->dot_dimension_numbers();
     auto new_dot = dot->AddInstruction(
