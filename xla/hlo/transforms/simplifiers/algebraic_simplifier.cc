@@ -2624,6 +2624,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleDivide(HloInstruction* divide) {
     return absl::OkStatus();
   }
 
+  std::cout << "Div here 7" << std::endl;
   // A / B => A >> log2(B) if B is a power of 2.
   if (std::unique_ptr<HloInstruction> shift =
           primitive_util::PrimitiveTypeSwitch<std::unique_ptr<HloInstruction>>(
@@ -2696,6 +2697,41 @@ absl::Status AlgebraicSimplifierVisitor::HandleDivide(HloInstruction* divide) {
     return ReplaceWithNewInstruction(
         divide, HloInstruction::CreateBinary(sqrt->shape(),
                                              HloOpcode::kMultiply, a, sqrt));
+  }
+
+  // Implementing this before quitting on Integral divisions
+  // This rule does not affect the element-wise division results so its ok to do it for integers as well
+  // CS526
+  // Implement C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C in {Add, Mul, Sub, Div}
+  HloInstruction* lhs;
+  HloInstruction* rhs;
+  HloInstruction* x;
+  HloInstruction* y;
+  HloInstruction* u;
+  HloInstruction* v;
+  HloInstruction* dim;
+  if (Match(divide, m::Divide(m::Op(&lhs), m::Op(&rhs))) &&
+      Match(lhs, m::Concatenate(m::Op(&x), m::Op(&u))) &&
+      Match(rhs, m::Concatenate(m::Op(&y), m::Op(&v))))
+  {
+    auto lhs_concat_dim = lhs->concatenate_dimension();
+    auto rhs_concat_dim = rhs->concatenate_dimension();
+    if (ShapeUtil::SameDimensions(lhs->shape(), rhs->shape()) &&
+        ShapeUtil::SameDimensions(x->shape(), y->shape()) &&
+        ShapeUtil::SameDimensions(u->shape(), v->shape()) &&
+        lhs_concat_dim == rhs_concat_dim)
+    {
+      auto new_div1 = divide->AddInstruction(
+          HloInstruction::CreateBinary(x->shape(), HloOpcode::kDivide,
+                                       x, y));
+      auto new_div2 = divide->AddInstruction(
+          HloInstruction::CreateBinary(u->shape(), HloOpcode::kDivide,
+                                       u, v));
+      auto new_concat = divide->AddInstruction(
+          HloInstruction::CreateConcatenate(
+            divide->shape(), {new_div1, new_div2}, lhs_concat_dim));
+      return ReplaceInstruction(divide, new_concat);
+    }
   }
 
   // Simplifying integral division would produce unexpected results.
@@ -5440,6 +5476,38 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
               multiply->shape(), new_mul, new_padding_value,
               lhs->padding_config()));
       return ReplaceInstruction(multiply, new_pad);
+    }
+  }
+
+  {
+    // CS526
+    // Implement C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C in {Add, Mul, Sub, Div}
+    HloInstruction* x;
+    HloInstruction* y;
+    HloInstruction* u;
+    HloInstruction* v;
+    HloInstruction* dim;
+    if (Match(lhs, m::Concatenate(m::Op(&x), m::Op(&u))) &&
+        Match(rhs, m::Concatenate(m::Op(&y), m::Op(&v))))
+    {
+      auto lhs_concat_dim = lhs->concatenate_dimension();
+      auto rhs_concat_dim = rhs->concatenate_dimension();
+      if (ShapeUtil::SameDimensions(lhs->shape(), rhs->shape()) &&
+          ShapeUtil::SameDimensions(x->shape(), y->shape()) &&
+          ShapeUtil::SameDimensions(u->shape(), v->shape()) &&
+          lhs_concat_dim == rhs_concat_dim)
+      {
+        auto new_mul1 = multiply->AddInstruction(
+            HloInstruction::CreateBinary(x->shape(), HloOpcode::kMultiply,
+                                         x, y));
+        auto new_mul2 = multiply->AddInstruction(
+            HloInstruction::CreateBinary(u->shape(), HloOpcode::kMultiply,
+                                         u, v));
+        auto new_concat = multiply->AddInstruction(
+            HloInstruction::CreateConcatenate(
+                multiply->shape(), {new_mul1, new_mul2}, lhs_concat_dim));
+        return ReplaceInstruction(multiply, new_concat);
+      }
     }
   }
 

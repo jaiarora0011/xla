@@ -13769,6 +13769,76 @@ TEST_F(AlgebraicSimplifierTest, AddConcatConcat)
 }
 
 
+TEST_F(AlgebraicSimplifierTest, MultiplyConcatConcat)
+{
+  // Testing C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C = Multiply
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s8[10,8] parameter(0)
+      arg.y = s8[10,8] parameter(1)
+      arg.u = s8[10,4] parameter(2)
+      arg.v = s8[10,4] parameter(3)
+
+      arg.x.concat = s8[10,12] concatenate(arg.x, arg.u), dimensions={1}
+      arg.y.concat = s8[10,12] concatenate(arg.y, arg.v), dimensions={1}
+      ROOT add = s8[10,12] multiply(arg.x.concat, arg.y.concat)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Concatenate(m::Multiply(m::Parameter(0), m::Parameter(1)), m::Multiply(m::Parameter(2), m::Parameter(3)))));
+}
+
+
+TEST_F(AlgebraicSimplifierTest, DivideConcatConcat)
+{
+  // Testing C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C = Divide
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = f32[10,8] parameter(0)
+      arg.y = f32[10,8] parameter(1)
+      arg.u = f32[10,4] parameter(2)
+      arg.v = f32[10,4] parameter(3)
+
+      arg.x.concat = f32[10,12] concatenate(arg.x, arg.u), dimensions={1}
+      arg.y.concat = f32[10,12] concatenate(arg.y, arg.v), dimensions={1}
+      ROOT add = f32[10,12] divide(arg.x.concat, arg.y.concat)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Concatenate(m::Divide(m::Parameter(0), m::Parameter(1)), m::Divide(m::Parameter(2), m::Parameter(3)))));
+}
+
+TEST_F(AlgebraicSimplifierTest, DivideConcatConcatInt)
+{
+  // Testing C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C = Divide
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s8[10,8] parameter(0)
+      arg.y = s8[10,8] parameter(1)
+      arg.u = s8[10,4] parameter(2)
+      arg.v = s8[10,4] parameter(3)
+
+      arg.x.concat = s8[10,12] concatenate(arg.x, arg.u), dimensions={1}
+      arg.y.concat = s8[10,12] concatenate(arg.y, arg.v), dimensions={1}
+      ROOT add = s8[10,12] divide(arg.x.concat, arg.y.concat)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Concatenate(m::Divide(m::Parameter(0), m::Parameter(1)), m::Divide(m::Parameter(2), m::Parameter(3)))));
+}
+
 }  // namespace
 }  // namespace xla
 
