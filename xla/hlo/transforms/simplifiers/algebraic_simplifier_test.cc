@@ -13782,7 +13782,7 @@ TEST_F(AlgebraicSimplifierTest, MultiplyConcatConcat)
 
       arg.x.concat = s8[10,12] concatenate(arg.x, arg.u), dimensions={1}
       arg.y.concat = s8[10,12] concatenate(arg.y, arg.v), dimensions={1}
-      ROOT add = s8[10,12] multiply(arg.x.concat, arg.y.concat)
+      ROOT mul = s8[10,12] multiply(arg.x.concat, arg.y.concat)
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
@@ -13806,7 +13806,7 @@ TEST_F(AlgebraicSimplifierTest, DivideConcatConcat)
 
       arg.x.concat = f32[10,12] concatenate(arg.x, arg.u), dimensions={1}
       arg.y.concat = f32[10,12] concatenate(arg.y, arg.v), dimensions={1}
-      ROOT add = f32[10,12] divide(arg.x.concat, arg.y.concat)
+      ROOT div = f32[10,12] divide(arg.x.concat, arg.y.concat)
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
@@ -13815,6 +13815,7 @@ TEST_F(AlgebraicSimplifierTest, DivideConcatConcat)
   EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::Concatenate(m::Divide(m::Parameter(0), m::Parameter(1)), m::Divide(m::Parameter(2), m::Parameter(3)))));
 }
+
 
 TEST_F(AlgebraicSimplifierTest, DivideConcatConcatInt)
 {
@@ -13829,7 +13830,7 @@ TEST_F(AlgebraicSimplifierTest, DivideConcatConcatInt)
 
       arg.x.concat = s8[10,12] concatenate(arg.x, arg.u), dimensions={1}
       arg.y.concat = s8[10,12] concatenate(arg.y, arg.v), dimensions={1}
-      ROOT add = s8[10,12] divide(arg.x.concat, arg.y.concat)
+      ROOT div = s8[10,12] divide(arg.x.concat, arg.y.concat)
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
@@ -13838,6 +13839,30 @@ TEST_F(AlgebraicSimplifierTest, DivideConcatConcatInt)
   EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::Concatenate(m::Divide(m::Parameter(0), m::Parameter(1)), m::Divide(m::Parameter(2), m::Parameter(3)))));
 }
+
+TEST_F(AlgebraicSimplifierTest, SubtractConcatConcat)
+{
+  // Testing C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C = Subtract
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = f32[10,8] parameter(0)
+      arg.y = f32[10,8] parameter(1)
+      arg.u = f32[10,4] parameter(2)
+      arg.v = f32[10,4] parameter(3)
+
+      arg.x.concat = f32[10,12] concatenate(arg.x, arg.u), dimensions={1}
+      arg.y.concat = f32[10,12] concatenate(arg.y, arg.v), dimensions={1}
+      ROOT sub = f32[10,12] subtract(arg.x.concat, arg.y.concat)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Concatenate(m::Subtract(m::Parameter(0), m::Parameter(1)), m::Subtract(m::Parameter(2), m::Parameter(3)))));
+}
+
 
 }  // namespace
 }  // namespace xla

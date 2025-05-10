@@ -2548,6 +2548,36 @@ absl::Status AlgebraicSimplifierVisitor::HandleSubtract(HloInstruction* sub) {
     return ReplaceInstruction(sub, MakeScalarLike(sub, 0));
   }
 
+  // CS526
+  // Implement C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C in {Add, Mul, Sub, Div}
+  HloInstruction* x;
+  HloInstruction* y;
+  HloInstruction* u;
+  HloInstruction* v;
+  HloInstruction* dim;
+  if (Match(lhs, m::Concatenate(m::Op(&x), m::Op(&u))) &&
+      Match(rhs, m::Concatenate(m::Op(&y), m::Op(&v))))
+  {
+    auto lhs_concat_dim = lhs->concatenate_dimension();
+    auto rhs_concat_dim = rhs->concatenate_dimension();
+    if (ShapeUtil::SameDimensions(lhs->shape(), rhs->shape()) &&
+        ShapeUtil::SameDimensions(x->shape(), y->shape()) &&
+        ShapeUtil::SameDimensions(u->shape(), v->shape()) &&
+        lhs_concat_dim == rhs_concat_dim)
+    {
+      auto new_sub1 = sub->AddInstruction(
+          HloInstruction::CreateBinary(x->shape(), HloOpcode::kSubtract,
+                                        x, y));
+      auto new_sub2 = sub->AddInstruction(
+          HloInstruction::CreateBinary(u->shape(), HloOpcode::kSubtract,
+                                        u, v));
+      auto new_concat = sub->AddInstruction(
+          HloInstruction::CreateConcatenate(
+              sub->shape(), {new_sub1, new_sub2}, lhs_concat_dim));
+      return ReplaceInstruction(sub, new_concat);
+    }
+  }
+
   return absl::OkStatus();
 }
 namespace {
@@ -2624,7 +2654,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleDivide(HloInstruction* divide) {
     return absl::OkStatus();
   }
 
-  std::cout << "Div here 7" << std::endl;
   // A / B => A >> log2(B) if B is a power of 2.
   if (std::unique_ptr<HloInstruction> shift =
           primitive_util::PrimitiveTypeSwitch<std::unique_ptr<HloInstruction>>(
