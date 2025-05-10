@@ -7666,6 +7666,39 @@ absl::Status AlgebraicSimplifierVisitor::HandleDynamicSlice(
     }
     MarkAsChanged();
   }
+
+  // CS526
+  // dynamic_slice(reduce(x, dims), i, s) ->
+  //    reduce(dynamic_slice(x, i, s), dims)
+  if (Match(operand, m::Reduce())) {
+    HloInstruction* x = operand->mutable_operand(0);
+    std::vector<HloInstruction*> new_ds_operands;
+    new_ds_operands.reserve(x->shape().dimensions_size());
+    auto zero = MakeScalarLike(dynamic_slice->mutable_operand(1), 0);
+    std::vector<int64_t> new_slice_sizes;
+    new_slice_sizes.reserve(x->shape().dimensions_size());
+    int64_t arg_index = 1;
+    for (int64_t i = 0; i < x->shape().dimensions_size(); ++i) {
+      if (absl::c_linear_search(operand->dimensions(), i)) {
+        new_ds_operands.push_back(zero);
+        new_slice_sizes.push_back(x->shape().dimensions(i));
+      } else {
+        new_ds_operands.push_back(dynamic_slice->mutable_operand(arg_index));
+        new_slice_sizes.push_back(dynamic_slice->slice_sizes(arg_index - 1));
+        ++arg_index;
+      }
+    }
+    TF_ASSIGN_OR_RETURN(
+        auto new_dynamic_slice,
+        MakeDynamicSliceHlo(x, new_ds_operands, new_slice_sizes));
+    TF_ASSIGN_OR_RETURN(
+        auto new_reduce,
+        MakeReduceHlo(new_dynamic_slice, operand->mutable_operand(1),
+                      operand->dimensions(), operand->to_apply()));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(dynamic_slice, new_reduce));
+    return absl::OkStatus();
+  }
+
   return absl::OkStatus();
 }
 

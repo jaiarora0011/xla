@@ -13543,5 +13543,59 @@ TEST_F(AlgebraicSimplifierTest, ConcatIotaF32Test) {
       GmockMatch(m::Iota().WithShape(S32, {2, 3, 22})));
 }
 
+TEST_F(AlgebraicSimplifierTest, DynamicSliceReduce) {
+  const char* kModuleStr = R"(
+    HloModule m
+    sum_red {
+      arg.0 = s32[] parameter(0)
+      arg.1 = s32[] parameter(1)
+      ROOT sum = s32[] add(arg.0, arg.1)
+    }
+
+    ENTRY main {
+      arg.0 = s32[1000,1000] parameter(0)
+      arg.1 = s32[] parameter(1)
+
+      constant.0 = s32[] constant(0)
+      reduce.0 = s32[1000] reduce(arg.0, constant.0), dimensions={1}, to_apply=sum_red
+      ROOT slice.res = s32[30] dynamic-slice(reduce.0, arg.1), dynamic_slice_sizes={30}
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Reduce(m::DynamicSlice(m::Parameter(0), m::Parameter(1),
+                                           m::ConstantScalar(0)),
+                           m::ConstantScalar(0))));
+}
+
+TEST_F(AlgebraicSimplifierTest, DynamicSliceMaxReduce) {
+  const char* kModuleStr = R"(
+    HloModule m
+    max_red {
+      arg.0 = s32[] parameter(0)
+      arg.1 = s32[] parameter(1)
+      ROOT sum = s32[] maximum(arg.0, arg.1)
+    }
+
+    ENTRY main {
+      arg.0 = s32[1000,1000,500] parameter(0)
+      arg.1 = s32[] parameter(1)
+
+      constant.0 = s32[] constant(0)
+      reduce.0 = s32[500] reduce(arg.0, constant.0), dimensions={0,1}, to_apply=max_red
+      ROOT slice.res = s32[30] dynamic-slice(reduce.0, arg.1), dynamic_slice_sizes={30}
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Reduce(
+                  m::DynamicSlice(m::Parameter(0), m::ConstantScalar(0),
+                                  m::ConstantScalar(0), m::Parameter(1)),
+                  m::ConstantScalar(0))));
+}
+
 }  // namespace
 }  // namespace xla
