@@ -13653,6 +13653,29 @@ TEST_F(AlgebraicSimplifierTest, SliceAdd)
               GmockMatch(m::Add(m::Slice(m::Parameter(0)), m::Slice(m::Parameter(1)))));
 }
 
+TEST_F(AlgebraicSimplifierTest, DynamicSliceAdd)
+{
+  // Testing DynamicSlice(Add(X, Y), I, S) ==> Add(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s32[10,10000] parameter(0)
+      arg.y = s32[10,10000] parameter(1)
+      arg.i = s32[2] parameter(2)
+      arg.s = s32[2] parameter(3)
+
+      add.xy = s32[10,10000] add(arg.x, arg.y)
+      ROOT dynamic-slice.xy = s32[5,5000] dynamic-slice(add.xy, arg.i, arg.s), dynamic_slice_sizes={2, 2000}
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Add(m::DynamicSlice(m::Parameter(0), m::Parameter(2)),
+                                m::DynamicSlice(m::Parameter(1), m::Parameter(2)))));
+}
+
 }  // namespace
 }  // namespace xla
 
