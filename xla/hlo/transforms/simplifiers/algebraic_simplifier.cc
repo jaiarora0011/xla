@@ -7357,6 +7357,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleSlice(HloInstruction* slice) {
                       RemoveRedundantStride(slice));
   if (removed_redundant_stride) {
     VLOG(10) << "Removed redundant stride for slice op.";
+    return absl::OkStatus();
   }
 
   // CS526
@@ -7371,6 +7372,39 @@ absl::Status AlgebraicSimplifierVisitor::HandleSlice(HloInstruction* slice) {
       return ReplaceWithNewInstruction(
           slice, HloInstruction::CreateIota(slice->shape(), iota_dim));
     }
+  }
+
+  // CS526
+  // slice(reduce(x, dims), s, e, p) ->
+  //    reduce(slice(x, s, e, p), dims)
+  HloInstruction* reduce = slice->mutable_operand(0);
+  if (Match(reduce, m::Reduce())) {
+    HloInstruction* x = reduce->mutable_operand(0);
+    const Shape& x_shape = x->shape();
+    const int64_t rank = x->shape().dimensions_size();
+    std::vector<int64_t> new_slice_starts(rank, 0);
+    std::vector<int64_t> new_slice_strides(rank, 1);
+    std::vector<int64_t> new_slice_limits(x_shape.dimensions().begin(),
+                                          x_shape.dimensions().end());
+    int64_t index = 0;
+    for (int64_t i = 0; i < rank; ++i) {
+      if (!absl::c_linear_search(reduce->dimensions(), i)) {
+        new_slice_starts[i] = slice->slice_starts(index);
+        new_slice_limits[i] = slice->slice_limits(index);
+        new_slice_strides[i] = slice->slice_strides(index);
+        ++index;
+      }
+    }
+    TF_ASSIGN_OR_RETURN(
+        auto new_slice,
+        MakeSliceHlo(x, new_slice_starts, new_slice_limits,
+                     new_slice_strides));
+    TF_ASSIGN_OR_RETURN(
+        auto new_reduce,
+        MakeReduceHlo(new_slice, reduce->mutable_operand(1),
+                      reduce->dimensions(), reduce->to_apply()));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(slice, new_reduce));
+    return absl::OkStatus();
   }
 
   return absl::OkStatus();

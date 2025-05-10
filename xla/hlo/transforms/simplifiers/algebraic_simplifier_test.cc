@@ -13576,7 +13576,7 @@ TEST_F(AlgebraicSimplifierTest, DynamicSliceMaxReduce) {
     max_red {
       arg.0 = s32[] parameter(0)
       arg.1 = s32[] parameter(1)
-      ROOT sum = s32[] maximum(arg.0, arg.1)
+      ROOT max = s32[] maximum(arg.0, arg.1)
     }
 
     ENTRY main {
@@ -13595,6 +13595,54 @@ TEST_F(AlgebraicSimplifierTest, DynamicSliceMaxReduce) {
                   m::DynamicSlice(m::Parameter(0), m::ConstantScalar(0),
                                   m::ConstantScalar(0), m::Parameter(1)),
                   m::ConstantScalar(0))));
+}
+
+TEST_F(AlgebraicSimplifierTest, SliceReduceTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    sum_red {
+      arg.0 = s32[] parameter(0)
+      arg.1 = s32[] parameter(1)
+      ROOT sum = s32[] add(arg.0, arg.1)
+    }
+
+    ENTRY main {
+      arg.0 = s32[1000,1000] parameter(0)
+
+      constant.0 = s32[] constant(0)
+      reduce.0 = s32[1000] reduce(arg.0, constant.0), dimensions={1}, to_apply=sum_red
+      ROOT slice.res = s32[30] slice(reduce.0), slice={[30:120:3]}
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Reduce(m::Slice(m::Parameter(0)), m::ConstantScalar(0))));
+}
+
+TEST_F(AlgebraicSimplifierTest, SliceMinReduceTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    min_red {
+      arg.0 = s32[] parameter(0)
+      arg.1 = s32[] parameter(1)
+      ROOT min = s32[] minimum(arg.0, arg.1)
+    }
+
+    ENTRY main {
+      arg.0 = s32[1000,1000,500] parameter(0)
+
+      constant.0 = s32[] constant(0)
+      reduce.0 = s32[500] reduce(arg.0, constant.0), dimensions={0,1}, to_apply=min_red
+      ROOT slice.res = s32[30] slice(reduce.0), slice={[30:90:2]}
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Reduce(m::Slice(m::Parameter(0)), m::ConstantScalar(0))));
 }
 
 }  // namespace
