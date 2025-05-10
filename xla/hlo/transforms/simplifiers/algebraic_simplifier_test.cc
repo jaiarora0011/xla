@@ -13762,6 +13762,72 @@ TEST_F(AlgebraicSimplifierTest, DynamicSliceAdd)
               GmockMatch(m::Add(m::DynamicSlice(m::Parameter(0), m::Parameter(2), m::Parameter(3)),
                                 m::DynamicSlice(m::Parameter(1), m::Parameter(2), m::Parameter(3)))));
 }
+TEST_F(AlgebraicSimplifierTest, DynamicSliceMul)
+{
+  // Testing DynamicSlice(Mul(X, Y), I, S) ==> Mul(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s32[10,10000] parameter(0)
+      arg.y = s32[10,10000] parameter(1)
+      arg.i = s32[] parameter(2)
+      arg.s = s32[] parameter(3)
+
+      mul.xy = s32[10,10000] multiply(arg.x, arg.y)
+      ROOT dynamic-slice.xy = s32[5,5000] dynamic-slice(mul.xy, arg.i, arg.s), dynamic_slice_sizes={5,5000}
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Multiply(m::DynamicSlice(m::Parameter(0), m::Parameter(2), m::Parameter(3)),
+                                     m::DynamicSlice(m::Parameter(1), m::Parameter(2), m::Parameter(3)))));
+}
+TEST_F(AlgebraicSimplifierTest, DynamicSliceSub)
+{
+  // Testing DynamicSlice(Sub(X, Y), I, S) ==> Sub(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s32[10,10000] parameter(0)
+      arg.y = s32[10,10000] parameter(1)
+      arg.i = s32[] parameter(2)
+      arg.s = s32[] parameter(3)
+
+      sub.xy = s32[10,10000] subtract(arg.x, arg.y)
+      ROOT dynamic-slice.xy = s32[5,5000] dynamic-slice(sub.xy, arg.i, arg.s), dynamic_slice_sizes={5,5000}
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Subtract(m::DynamicSlice(m::Parameter(0), m::Parameter(2), m::Parameter(3)),
+                                     m::DynamicSlice(m::Parameter(1), m::Parameter(2), m::Parameter(3)))));
+}
+TEST_F(AlgebraicSimplifierTest, DynamicSliceDiv)
+{
+  // Testing DynamicSlice(Div(X, Y), I, S) ==> Div(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s32[10,10000] parameter(0)
+      arg.y = s32[10,10000] parameter(1)
+      arg.i = s32[] parameter(2)
+      arg.s = s32[] parameter(3)
+
+      div.xy = s32[10,10000] divide(arg.x, arg.y)
+      ROOT dynamic-slice.xy = s32[5,5000] dynamic-slice(div.xy, arg.i, arg.s), dynamic_slice_sizes={5,5000}
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Divide(m::DynamicSlice(m::Parameter(0), m::Parameter(2), m::Parameter(3)),
+                                   m::DynamicSlice(m::Parameter(1), m::Parameter(2), m::Parameter(3)))));
+}
 
 TEST_F(AlgebraicSimplifierTest, RevDot)
 {

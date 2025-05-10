@@ -8239,6 +8239,69 @@ absl::Status AlgebraicSimplifierVisitor::HandleDynamicSlice(
     return ReplaceInstruction(dynamic_slice, add_slice);
   }
 
+  // CS526
+  // Implement DynamicSlice(Multiply(X, Y), I, S) ==> Multiply(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+  HloInstruction* multiply;
+  if (Match(operand, m::Multiply(m::Op(&x), m::Op(&y)))) {
+    auto start_indices = absl::MakeSpan(dynamic_slice->operands()).subspan(1);
+    auto slice_sizes = dynamic_slice->dynamic_slice_sizes();
+    auto slice_shape = dynamic_slice->shape();
+
+    auto x_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateDynamicSlice(slice_shape, x, start_indices,
+                                           slice_sizes));
+    auto y_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateDynamicSlice(slice_shape, y, start_indices,
+                                           slice_sizes));
+    auto multiply_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateBinary(slice_shape, HloOpcode::kMultiply,
+                                     x_slice, y_slice));
+    simplifier_->UpdateLayout(multiply_slice->mutable_shape());
+    return ReplaceInstruction(dynamic_slice, multiply_slice);
+  }
+
+  // CS526
+  // Implement DynamicSlice(Subtract(X, Y), I, S) ==> Subtract(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+  HloInstruction* subtract;
+  if (Match(operand, m::Subtract(m::Op(&x), m::Op(&y)))) {
+    auto start_indices = absl::MakeSpan(dynamic_slice->operands()).subspan(1);
+    auto slice_sizes = dynamic_slice->dynamic_slice_sizes();
+    auto slice_shape = dynamic_slice->shape();
+
+    auto x_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateDynamicSlice(slice_shape, x, start_indices,
+                                           slice_sizes));
+    auto y_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateDynamicSlice(slice_shape, y, start_indices,
+                                           slice_sizes));
+    auto subtract_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateBinary(slice_shape, HloOpcode::kSubtract,
+                                     x_slice, y_slice));
+    simplifier_->UpdateLayout(subtract_slice->mutable_shape());
+    return ReplaceInstruction(dynamic_slice, subtract_slice);
+  }
+
+  // CS526
+  // Implement DynamicSlice(Divide(X, Y), I, S) ==> Divide(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+  HloInstruction* divide;
+  if (Match(operand, m::Divide(m::Op(&x), m::Op(&y)))) {
+    auto start_indices = absl::MakeSpan(dynamic_slice->operands()).subspan(1);
+    auto slice_sizes = dynamic_slice->dynamic_slice_sizes();
+    auto slice_shape = dynamic_slice->shape();
+
+    auto x_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateDynamicSlice(slice_shape, x, start_indices,
+                                           slice_sizes));
+    auto y_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateDynamicSlice(slice_shape, y, start_indices,
+                                           slice_sizes));
+    auto divide_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateBinary(slice_shape, HloOpcode::kDivide,
+                                     x_slice, y_slice));
+    simplifier_->UpdateLayout(divide_slice->mutable_shape());
+    return ReplaceInstruction(dynamic_slice, divide_slice);
+  }
+
   return absl::OkStatus();
 }
 
