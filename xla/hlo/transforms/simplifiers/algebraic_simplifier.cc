@@ -1222,50 +1222,67 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
 
   // CS526
   // Implement Add(Dot(X, Y, C, PHI), Dot(X, Z, C, PHI)) ==> Dot(X, Add(Y, Z), C, PHI)
-  HloInstruction* x;
-  HloInstruction* y;
+
   HloInstruction* z;
-  HloInstruction* c;
   HloInstruction* phi;
   if (Match(lhs, m::Dot(m::Op(&x), m::Op(&y))) &&
       Match(rhs, m::Dot(m::Op().Is(x), m::Op(&z))))
   {
-    auto lhs_dims = lhs->dot_dimension_numbers();
-    auto rhs_dims = rhs->dot_dimension_numbers();
     if (ShapeUtil::SameDimensions(lhs->shape(), rhs->shape())) 
     {
-      // Check if the dot dimension numbers are the same.
-      for (int i = 0; i < lhs_dims.lhs_contracting_dimensions_size(); ++i) {
-        if (lhs_dims.lhs_contracting_dimensions(i) !=
-            rhs_dims.lhs_contracting_dimensions(i)) {
-          return absl::OkStatus();
+      auto lhs_dims = lhs->dot_dimension_numbers();
+      auto rhs_dims = rhs->dot_dimension_numbers();
+      
+      // Check equality of contracting dimensions
+      bool contracting_dims_equal = 
+      lhs_dims.lhs_contracting_dimensions_size() == rhs_dims.lhs_contracting_dimensions_size() &&
+      lhs_dims.rhs_contracting_dimensions_size() == rhs_dims.rhs_contracting_dimensions_size();
+
+      if (contracting_dims_equal) {
+        for (int i = 0; i < lhs_dims.lhs_contracting_dimensions_size(); ++i) {
+          if (lhs_dims.lhs_contracting_dimensions(i) != rhs_dims.lhs_contracting_dimensions(i)) {
+            contracting_dims_equal = false;
+            break;
+          }
+        }
+        for (int i = 0; i < lhs_dims.rhs_contracting_dimensions_size(); ++i) {
+          if (lhs_dims.rhs_contracting_dimensions(i) != rhs_dims.rhs_contracting_dimensions(i)) {
+            contracting_dims_equal = false;
+            break;
+          }
         }
       }
-      for (int i = 0; i < lhs_dims.rhs_contracting_dimensions_size(); ++i) {
-        if (lhs_dims.rhs_contracting_dimensions(i) !=
-            rhs_dims.rhs_contracting_dimensions(i)) {
-          return absl::OkStatus();
+
+      bool batch_dims_equal = 
+      lhs_dims.lhs_batch_dimensions_size() == rhs_dims.lhs_batch_dimensions_size() &&
+      lhs_dims.rhs_batch_dimensions_size() == rhs_dims.rhs_batch_dimensions_size();
+      
+      if (batch_dims_equal) {
+        for (int i = 0; i < lhs_dims.lhs_batch_dimensions_size(); ++i) {
+          if (lhs_dims.lhs_batch_dimensions(i) != rhs_dims.lhs_batch_dimensions(i)) {
+            batch_dims_equal = false;
+            break;
+          }
+        }
+        
+        for (int i = 0; i < lhs_dims.rhs_batch_dimensions_size(); ++i) {
+          if (lhs_dims.rhs_batch_dimensions(i) != rhs_dims.rhs_batch_dimensions(i)) {
+            batch_dims_equal = false;
+            break;
+          }
         }
       }
-      for (int i = 0; i < lhs_dims.lhs_batch_dimensions_size(); ++i) {
-        if (lhs_dims.lhs_batch_dimensions(i) !=
-            rhs_dims.lhs_batch_dimensions(i)) {
-          return absl::OkStatus();
-        }
+
+      if (contracting_dims_equal && batch_dims_equal)
+      {
+        HloInstruction* inner_add = lhs->AddInstruction(
+            HloInstruction::CreateBinary(x->shape(), HloOpcode::kAdd, y, z));
+        HloInstruction* dot = lhs->AddInstruction(
+            HloInstruction::CreateDot(add->shape(), x, inner_add, lhs_dims, lhs->precision_config()));
+        return ReplaceInstruction(add, dot);
       }
-      for (int i = 0; i < lhs_dims.rhs_batch_dimensions_size(); ++i) {
-        if (lhs_dims.rhs_batch_dimensions(i) !=
-            rhs_dims.rhs_batch_dimensions(i)) {
-          return absl::OkStatus();
-        }
-      }
-      HloInstruction* add = lhs->AddInstruction(
-          HloInstruction::CreateBinary(lhs->shape(), HloOpcode::kAdd, y, z));
-      HloInstruction* dot = lhs->AddInstruction(
-          HloInstruction::CreateDot(add->shape(), x, add, lhs_dims, lhs->precision_config()));
-      return ReplaceInstruction(add, dot);
     }
-  }  
+  }
 
   return absl::OkStatus();
 }
