@@ -13676,6 +13676,26 @@ TEST_F(AlgebraicSimplifierTest, DynamicSliceAdd)
                                 m::DynamicSlice(m::Parameter(1), m::Parameter(2), m::Parameter(3)))));
 }
 
+TEST_F(AlgebraicSimplifierTest, RevDot)
+{
+  // Testing Dot(Rev(X, dims), Y, PHI, PHI) ==> Rev(Dot(X, Y, PHI, PHI), dims)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s32[10,10000] parameter(0)
+      arg.y = s32[10000,10] parameter(1)
+
+      rev.x = s32[10,10000] rev(arg.x), dimensions={1}
+      ROOT dot.xy = s32[10,10] dot(rev.x, arg.y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Reverse(m::Dot(m::Parameter(0), m::Parameter(1)))));
+}
+
 }  // namespace
 }  // namespace xla
 

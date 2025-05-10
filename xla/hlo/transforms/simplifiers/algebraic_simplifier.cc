@@ -4349,6 +4349,23 @@ absl::Status AlgebraicSimplifierVisitor::HandleDot(HloInstruction* dot) {
     return absl::OkStatus();
   }
 
+  // CS526
+  // Implement Dot(Rev(X, dims), Y, PHI, PHI) ==> Rev(Dot(X, Y, PHI, PHI), dims)
+  HloInstruction* rev;
+  HloInstruction* x;
+  HloInstruction* y;
+  if (Match(dot, m::Dot(m::Reverse(&rev, m::Op(&x)), m::Op(&y)))) {
+    auto rev_dims = rev->dimensions();
+    auto dot_dims = dot->dot_dimension_numbers();
+    auto new_dot = dot->AddInstruction(
+        HloInstruction::CreateDot(dot->shape(), x, y, dot_dims,
+                                  dot->precision_config()));
+    auto new_rev = dot->AddInstruction(
+        HloInstruction::CreateReverse(new_dot->shape(), new_dot, rev_dims));
+    return ReplaceInstruction(dot, new_rev);
+  }
+
+
   return absl::OkStatus();
 }
 
