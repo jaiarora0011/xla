@@ -7552,6 +7552,31 @@ absl::Status AlgebraicSimplifierVisitor::HandleSlice(HloInstruction* slice) {
     VLOG(10) << "Removed redundant stride for slice op.";
   }
 
+  // CS526
+  // Implement Slice(Add(X, Y), S, E, P) ==> Add(Slice(X, S, E, P), Slice(Y, S, E, P))
+  HloInstruction* add;
+  HloInstruction* add_x;
+  HloInstruction* add_y;
+  if (Match(slice, m::Slice(m::Op(&add))) &&
+      Match(add, m::Add(m::Op(&add_x), m::Op(&add_y))))
+  {
+    auto slice_starts = slice->slice_starts();
+    auto slice_limits = slice->slice_limits();
+    auto slice_strides = slice->slice_strides();
+    auto slice_shape = slice->shape();
+    auto add_x_slice = slice->AddInstruction(
+        HloInstruction::CreateSlice(slice_shape, add_x, slice_starts,
+                                    slice_limits, slice_strides));
+    auto add_y_slice = slice->AddInstruction(
+        HloInstruction::CreateSlice(slice_shape, add_y, slice_starts,
+                                    slice_limits, slice_strides));
+    auto add_slice = slice->AddInstruction(
+        HloInstruction::CreateBinary(slice_shape, HloOpcode::kAdd,
+                                     add_x_slice, add_y_slice));
+    simplifier_->UpdateLayout(add_slice->mutable_shape());
+    return ReplaceInstruction(slice, add_slice);
+  }
+
   return absl::OkStatus();
 }
 

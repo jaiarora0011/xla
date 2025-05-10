@@ -13633,6 +13633,27 @@ TEST_F(AlgebraicSimplifierTest, AddReduce)
               GmockMatch(m::Reduce(m::Add(m::Parameter(0), m::Parameter(1)), m::Constant())));
 }
 
+TEST_F(AlgebraicSimplifierTest, SliceAdd)
+{
+  // Testing Slice(Add(X, Y), S, E, P) ==> Add(Slice(X, S, E, P), Slice(Y, S, E, P))
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s32[10,10000] parameter(0)
+      arg.y = s32[10,10000] parameter(1)
+
+      add.xy = s32[10,10000] add(arg.x, arg.y)
+      slice.xy = s32[10,10000] slice(add.xy), slice={[0:10], [0:10000]}
+      ROOT add.res = s32[10,10000] add(slice.xy, slice.xy)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Add(m::Slice(m::Parameter(0)), m::Slice(m::Parameter(1)))));
+}
+
 }  // namespace
 }  // namespace xla
 
