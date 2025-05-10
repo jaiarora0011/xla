@@ -1342,12 +1342,11 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
       auto inner_add2 = lhs->AddInstruction(
           HloInstruction::CreateBinary(u->shape(), HloOpcode::kAdd, u, v));
       auto concat1 = lhs->AddInstruction(
-          HloInstruction::CreateConcatenate(inner_add1->shape(), {inner_add1, inner_add2}, lhs_concat_dim));
+          HloInstruction::CreateConcatenate(lhs->shape(), {inner_add1, inner_add2}, lhs_concat_dim));
       return ReplaceInstruction(add, concat1);
     }
   }
-  
-  
+
   return absl::OkStatus();
 }
 
