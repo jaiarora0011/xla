@@ -13720,6 +13720,32 @@ TEST_F(AlgebraicSimplifierTest, ConcatMulMul)
               GmockMatch(m::Multiply(m::Concatenate(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
 }
 
+TEST_F(AlgebraicSimplifierTest, ConcatenatePadPad)
+{
+  // Testing Concatenate(Pad(A, v, low, 0, int), Pad(B, v, 0, high, int), dim) ==> 
+  // Pad(Concatenate(A, B, dim), v, low, high, int)
+  // if int = 0 && low + Shape(A) >= 0 && high + Shape(B) >= 0
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.a = s8[5,8] parameter(0)
+      arg.b = s8[5,8] parameter(1)
+      arg.v = s8[1,1] parameter(2)
+
+      pad.a = s8[10,8] pad(arg.a, arg.v), padding=0_5x0_0
+      pad.b = s8[10,8] pad(arg.b, arg.v), padding=0_0x0_5
+      ROOT concat = s8[20,8] concatenate(pad.a, pad.b), dimensions={0}
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Pad(m::Concatenate(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
+
+}
+
+
 }  // namespace
 }  // namespace xla
 

@@ -2215,6 +2215,72 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
                          broadcast_dims, concatenate->shape()));
   }
 
+  // CS526
+  // Implement Concatenate(Pad(A, v, low, 0, int), Pad(B, v, 0, high, int), dim) ==> 
+  // Pad(Concatenate(A, B, dim), v, low, high, int)
+  // if int = 0 && low + Shape(A) >= 0 && high + Shape(B) >= 0
+  HloInstruction* v1;
+  HloInstruction* v2;
+  HloInstruction* pad_a;
+  HloInstruction* a;
+  HloInstruction* pad_b;
+  HloInstruction* b;
+  HloInstruction* low;
+  HloInstruction* high;
+  HloInstruction* interior;
+
+  if (Match(concatenate, m::Concatenate(
+          m::Pad(&pad_a, m::Op(&a), m::Op(&v1)),
+          m::Pad(&pad_b, m::Op(&b), m::Op(&v2)))))
+  {
+    auto dim = concatenate->concatenate_dimension();
+    auto pad_a_config = pad_a->padding_config();
+    auto pad_b_config = pad_b->padding_config();
+
+    if (pad_a_config.dimensions_size() != pad_b_config.dimensions_size() ||  v1 != v2) {
+      return absl::OkStatus();
+    }
+
+    auto a_shape = a->shape();
+    auto b_shape = b->shape();
+    auto new_padding_config = pad_a_config;
+    for (int i = 0; i < pad_a_config.dimensions_size(); ++i) {
+      auto pad_a_dim = pad_a_config.dimensions(i);
+      auto pad_b_dim = pad_b_config.dimensions(i);
+
+      if (pad_a_dim.edge_padding_high() != 0 ||
+          pad_b_dim.edge_padding_low() != 0 ||
+          pad_a_dim.interior_padding() != 0 ||
+          pad_b_dim.interior_padding() != 0) {
+        return absl::OkStatus();
+      }
+      if (pad_a_dim.edge_padding_low() + a_shape.dimensions(i) < 0 ||
+          pad_b_dim.edge_padding_high() + b_shape.dimensions(i) < 0) {
+        return absl::OkStatus();
+      }
+      new_padding_config.mutable_dimensions(i)->set_edge_padding_low(
+          pad_a_dim.edge_padding_low());
+      new_padding_config.mutable_dimensions(i)->set_edge_padding_high(
+          pad_b_dim.edge_padding_high());
+      new_padding_config.mutable_dimensions(i)->set_interior_padding(
+          pad_a_dim.interior_padding());
+    }
+
+    auto new_concat_shape = a_shape;
+    for (int i = 0; i < new_concat_shape.dimensions_size(); ++i) {
+      if (i == dim) {
+        new_concat_shape.set_dimensions(i,
+            a_shape.dimensions(i) + b_shape.dimensions(i));
+      }
+    }
+    auto new_concat = concatenate->AddInstruction(
+        HloInstruction::CreateConcatenate(
+            new_concat_shape, {a, b}, dim));
+    auto new_pad = concatenate->AddInstruction(
+        HloInstruction::CreatePad(
+            concatenate->shape(), new_concat, v1, new_padding_config));
+    return ReplaceInstruction(concatenate, new_pad);
+  }
 
   return absl::OkStatus();
 }
