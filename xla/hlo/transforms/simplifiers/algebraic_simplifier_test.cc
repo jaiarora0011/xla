@@ -13463,6 +13463,47 @@ TEST_F(AlgebraicSimplifierTest, MaxAddAdd)
   EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::Add(m::Maximum(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
 }
+TEST_F(AlgebraicSimplifierTest, MaxMulMul)
+{
+  // Testing Max(Mul(X, Z), Mul(Y, Z)) ==> Mul(Max(X, Y), Z)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      y = f32[8] parameter(1)
+      z = f32[8] parameter(2)
+      mul1 = f32[8] multiply(x, z)
+      mul2 = f32[8] multiply(y, z)
+      ROOT out = f32[8] maximum(mul1, mul2)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Multiply(m::Maximum(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
+}
+TEST_F(AlgebraicSimplifierTest, MaxSubSub)
+{
+  // Testing Max(Sub(X, Z), Sub(Y, Z)) ==> Sub(Max(X, Y), Z)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8] parameter(0)
+      y = f32[8] parameter(1)
+      z = f32[8] parameter(2)
+      sub1 = f32[8] subtract(x, z)
+      sub2 = f32[8] subtract(y, z)
+      ROOT out = f32[8] maximum(sub1, sub2)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Subtract(m::Maximum(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
+}
+
 
 TEST_F(AlgebraicSimplifierTest, Xor)
 {

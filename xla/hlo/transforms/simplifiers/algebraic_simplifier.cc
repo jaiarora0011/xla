@@ -5103,6 +5103,30 @@ absl::Status AlgebraicSimplifierVisitor::HandleMaximum(
                                              new_maximum, z));
   }
 
+  // CS526
+  // Implement Max(Mul(X, Z), Mul(Y, Z)) ==> Mul(Max(X, Y), Z)
+  if (Match(lhs, m::Multiply(m::Op(&x), m::Op(&z))) &&
+      Match(rhs, m::Multiply(m::Op(&y), m::Op().Is(z)))) {
+    TF_ASSIGN_OR_RETURN(
+        auto new_maximum,
+        MakeBinaryHlo(HloOpcode::kMaximum, x, y));
+    return ReplaceWithNewInstruction(
+        maximum, HloInstruction::CreateBinary(maximum->shape(), HloOpcode::kMultiply,
+                                             new_maximum, z));
+  }
+
+  // CS526
+  // Implement Max(Sub(X, Z), Sub(Y, Z)) ==> Sub(Max(X, Y), Z)
+  if (Match(lhs, m::Subtract(m::Op(&x), m::Op(&z))) &&
+      Match(rhs, m::Subtract(m::Op(&y), m::Op().Is(z)))) {
+    TF_ASSIGN_OR_RETURN(
+        auto new_maximum,
+        MakeBinaryHlo(HloOpcode::kMaximum, x, y));
+    return ReplaceWithNewInstruction(
+        maximum, HloInstruction::CreateBinary(maximum->shape(), HloOpcode::kSubtract,
+                                             new_maximum, z));
+  }
+
 
   return absl::OkStatus();
 }
