@@ -2164,57 +2164,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
         return ReplaceInstruction(concatenate, new_mul);
       }
 
-  if (operands.size() == 2) {
-    // A binary concat with a broadcasted scalar as an operand can be converted
-    // into a pad which is simpler to fold into other operations.
-    bool is_effective_low_pad = Match(
-        operands[0], m::Broadcast(m::Op().WithShape(m::Shape().IsScalar())));
-    bool is_effective_high_pad = Match(
-        operands[1], m::Broadcast(m::Op().WithShape(m::Shape().IsScalar())));
-    if (!is_effective_low_pad && !is_effective_high_pad) {
-      return absl::OkStatus();
-    }
-    PaddingConfig padding_config;
-    for (int64_t dim = 0; dim < operands[0]->shape().dimensions_size(); ++dim) {
-      auto padding_config_dim = padding_config.add_dimensions();
-      padding_config_dim->set_edge_padding_high(0);
-      padding_config_dim->set_edge_padding_low(0);
-      padding_config_dim->set_interior_padding(0);
-      if (dim == concatenate_dimension) {
-        if (is_effective_low_pad) {
-          padding_config_dim->set_edge_padding_low(
-              operands[0]->shape().dimensions(dim));
-        } else {
-          padding_config_dim->set_edge_padding_high(
-              operands[1]->shape().dimensions(dim));
-        }
-      }
-    }
-    int64_t operand_to_pad = is_effective_low_pad ? 1 : 0;
-    int64_t pad_value_operand = is_effective_low_pad ? 0 : 1;
-    HloInstruction* pad = concatenate->AddInstruction(HloInstruction::CreatePad(
-        concatenate->shape(), operands[operand_to_pad],
-        operands[pad_value_operand]->mutable_operand(0), padding_config));
-    return ReplaceInstruction(concatenate, pad);
-  }
-
-  if (absl::c_count(operands, operands[0]) == operands.size() &&
-      operands[0]->shape().dimensions(concatenate_dimension) == 1) {
-    Shape new_shape = operands[0]->shape();
-    DimensionVector broadcast_dims;
-    for (int64_t i = 0; i < new_shape.dimensions_size(); ++i) {
-      if (i == concatenate_dimension) {
-        continue;
-      }
-      broadcast_dims.push_back(i);
-    }
-    new_shape.DeleteDimension(concatenate_dimension);
-    return ReplaceInstruction(
-        concatenate,
-        MakeBroadcastHlo(MakeReshapeHlo(new_shape, operands[0]).value(),
-                         broadcast_dims, concatenate->shape()));
-  }
-
   // CS526
   // Implement Concatenate(Pad(A, v, low, 0, int), Pad(B, v, 0, high, int), dim) ==> 
   // Pad(Concatenate(A, B, dim), v, low, high, int)
@@ -2229,8 +2178,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
   HloInstruction* high;
   HloInstruction* interior;
   
-  std::cout << "Concatenate: " << concatenate->ToString() << std::endl;
-
   if (Match(concatenate, m::Concatenate(
           m::Pad(&pad_a, m::Op(&a), m::Op(&v1)),
           m::Pad(&pad_b, m::Op(&b), m::Op(&v2)))))
@@ -2282,6 +2229,57 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
         HloInstruction::CreatePad(
             concatenate->shape(), new_concat, v1, new_padding_config));
     return ReplaceInstruction(concatenate, new_pad);
+  }
+
+  if (operands.size() == 2) {
+    // A binary concat with a broadcasted scalar as an operand can be converted
+    // into a pad which is simpler to fold into other operations.
+    bool is_effective_low_pad = Match(
+        operands[0], m::Broadcast(m::Op().WithShape(m::Shape().IsScalar())));
+    bool is_effective_high_pad = Match(
+        operands[1], m::Broadcast(m::Op().WithShape(m::Shape().IsScalar())));
+    if (!is_effective_low_pad && !is_effective_high_pad) {
+      return absl::OkStatus();
+    }
+    PaddingConfig padding_config;
+    for (int64_t dim = 0; dim < operands[0]->shape().dimensions_size(); ++dim) {
+      auto padding_config_dim = padding_config.add_dimensions();
+      padding_config_dim->set_edge_padding_high(0);
+      padding_config_dim->set_edge_padding_low(0);
+      padding_config_dim->set_interior_padding(0);
+      if (dim == concatenate_dimension) {
+        if (is_effective_low_pad) {
+          padding_config_dim->set_edge_padding_low(
+              operands[0]->shape().dimensions(dim));
+        } else {
+          padding_config_dim->set_edge_padding_high(
+              operands[1]->shape().dimensions(dim));
+        }
+      }
+    }
+    int64_t operand_to_pad = is_effective_low_pad ? 1 : 0;
+    int64_t pad_value_operand = is_effective_low_pad ? 0 : 1;
+    HloInstruction* pad = concatenate->AddInstruction(HloInstruction::CreatePad(
+        concatenate->shape(), operands[operand_to_pad],
+        operands[pad_value_operand]->mutable_operand(0), padding_config));
+    return ReplaceInstruction(concatenate, pad);
+  }
+
+  if (absl::c_count(operands, operands[0]) == operands.size() &&
+      operands[0]->shape().dimensions(concatenate_dimension) == 1) {
+    Shape new_shape = operands[0]->shape();
+    DimensionVector broadcast_dims;
+    for (int64_t i = 0; i < new_shape.dimensions_size(); ++i) {
+      if (i == concatenate_dimension) {
+        continue;
+      }
+      broadcast_dims.push_back(i);
+    }
+    new_shape.DeleteDimension(concatenate_dimension);
+    return ReplaceInstruction(
+        concatenate,
+        MakeBroadcastHlo(MakeReshapeHlo(new_shape, operands[0]).value(),
+                         broadcast_dims, concatenate->shape()));
   }
 
   return absl::OkStatus();
