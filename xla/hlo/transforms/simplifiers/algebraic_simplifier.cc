@@ -1283,6 +1283,40 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
       }
     }
   }
+  // CS526
+  // Implement Add(Reduce(add, X, dims), Reduce(add, Y, dims)) ==> Reduce(add, Add(X, Y), dims)
+  HloInstruction* x_reduce;
+  HloInstruction* y_reduce;
+  HloInstruction* x_init;
+  HloInstruction* y_init;
+  HloComputation* dims1;
+  HloComputation* dims2;
+  if (Match(lhs, m::Reduce(m::Op(&x), m::Op(&x_init))) &&
+      Match(rhs, m::Reduce(m::Op(&y), m::Op(&y_init))))
+  {
+    auto lhs_reduce = Cast<HloReduceInstruction>(lhs);
+    auto rhs_reduce = Cast<HloReduceInstruction>(rhs);
+
+    auto lhs_computation = lhs_reduce->to_apply();
+    auto rhs_computation = rhs_reduce->to_apply();
+
+    auto lhs_reduce_dims = lhs_reduce->dimensions();
+    auto rhs_reduce_dims = rhs_reduce->dimensions();
+    if (ShapeUtil::SameDimensions(lhs->shape(), rhs->shape()) &&
+        ShapeUtil::SameDimensions(x->shape(), y->shape()) &&
+        ShapeUtil::SameDimensions(x_init->shape(), y_init->shape()) &&
+        lhs_computation == rhs_computation &&
+        lhs_reduce_dims == rhs_reduce_dims) 
+    {
+      HloInstruction* inner_add = lhs->AddInstruction(
+          HloInstruction::CreateBinary(x->shape(), HloOpcode::kAdd, x, y));
+      HloInstruction* reduce = lhs->AddInstruction(
+          HloInstruction::CreateReduce(add->shape(), inner_add, x_init,
+                                       lhs_reduce_dims, lhs_computation));
+      return ReplaceInstruction(add, reduce);
+    }
+    
+  }
 
   return absl::OkStatus();
 }
