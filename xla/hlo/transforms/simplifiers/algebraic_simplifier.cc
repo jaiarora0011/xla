@@ -2228,6 +2228,8 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
   HloInstruction* low;
   HloInstruction* high;
   HloInstruction* interior;
+  
+  std::cout << "Concatenate: " << concatenate->ToString() << std::endl;
 
   if (Match(concatenate, m::Concatenate(
           m::Pad(&pad_a, m::Op(&a), m::Op(&v1)),
