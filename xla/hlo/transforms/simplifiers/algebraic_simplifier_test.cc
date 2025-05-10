@@ -13509,5 +13509,39 @@ TEST_F(AlgebraicSimplifierTest, ClampYXYFPNegativeTest) {
   ASSERT_FALSE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
 }
 
+TEST_F(AlgebraicSimplifierTest, ConcatIotaTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      iota.1 = s8[2,3,4] iota(), iota_dimension=0
+      iota.2 = s8[2,5,4] iota(), iota_dimension=0
+      ROOT concat.res = s8[2,8,4] concatenate(iota.1, iota.2), dimensions={1}
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Iota().WithShape(S8, {2, 8, 4})));
+}
+
+TEST_F(AlgebraicSimplifierTest, ConcatIotaF32Test) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      iota.1 = s32[2,3,4] iota(), iota_dimension=0
+      iota.2 = s32[2,3,5] iota(), iota_dimension=0
+      iota.3 = s32[2,3,6] iota(), iota_dimension=0
+      iota.4 = s32[2,3,7] iota(), iota_dimension=0
+      ROOT concat.res = s32[2,3,22] concatenate(iota.1, iota.2, iota.3, iota.4), dimensions={2}
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Iota().WithShape(S32, {2, 3, 22})));
+}
+
 }  // namespace
 }  // namespace xla

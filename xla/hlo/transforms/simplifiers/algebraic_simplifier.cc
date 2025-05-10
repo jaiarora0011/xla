@@ -1929,6 +1929,30 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
     return absl::OkStatus();
   }
 
+  // CS526
+  // concat(iota(), iota(), ...) -> iota()
+  VLOG(10) << "Trying to simplify concatenation of iotas"
+           << concatenate->ToString();
+  if (absl::c_all_of(operands, [](HloInstruction* operand) {
+        return operand->opcode() == HloOpcode::kIota;
+      })) {
+    std::vector<HloIotaInstruction*> iota_ops;
+    absl::c_transform(operands, std::back_inserter(iota_ops),
+                      [](HloInstruction* operand) {
+                        return Cast<HloIotaInstruction>(operand);
+                      });
+    int64_t first_iota_dim = iota_ops[0]->iota_dimension();
+    bool all_same_iota_dim =
+        absl::c_all_of(iota_ops, [first_iota_dim](HloIotaInstruction* iota) {
+          return iota->iota_dimension() == first_iota_dim;
+        });
+    if (all_same_iota_dim && first_iota_dim != concatenate_dimension) {
+      return ReplaceWithNewInstruction(
+          concatenate,
+          HloInstruction::CreateIota(concatenate->shape(), first_iota_dim));
+    }
+  }
+
   if (operands.size() == 2) {
     // A binary concat with a broadcasted scalar as an operand can be converted
     // into a pad which is simpler to fold into other operations.
