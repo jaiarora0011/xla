@@ -7878,20 +7878,19 @@ absl::Status AlgebraicSimplifierVisitor::HandleDynamicSlice(
   HloInstruction* add;
   HloInstruction* x;
   HloInstruction* y;
-  if (Match(dynamic_slice, m::DynamicSlice(m::Op(&add))) &&
-      Match(add, m::Add(m::Op(&x), m::Op(&y)))) {
-        auto start_indices = absl::MakeSpan(dynamic_slice->operands()).subspan(1);
-        auto slice_starts = dynamic_slice->slice_starts();
-        auto slice_sizes = dynamic_slice->dynamic_slice_sizes();
+  if (Match(operand, m::Add(m::Op(&x), m::Op(&y)))) {
+    auto start_indices = absl::MakeSpan(dynamic_slice->operands()).subspan(1);
+    auto slice_sizes = dynamic_slice->dynamic_slice_sizes();
+    auto slice_shape = dynamic_slice->shape();
 
     auto x_slice = dynamic_slice->AddInstruction(
-        HloInstruction::CreateDynamicSlice(x->shape(), x, start_indices,
+        HloInstruction::CreateDynamicSlice(slice_shape, x, start_indices,
                                            slice_sizes));
     auto y_slice = dynamic_slice->AddInstruction(
-        HloInstruction::CreateDynamicSlice(y->shape(), y, start_indices,
+        HloInstruction::CreateDynamicSlice(slice_shape, y, start_indices,
                                            slice_sizes));
     auto add_slice = dynamic_slice->AddInstruction(
-        HloInstruction::CreateBinary(dynamic_slice->shape(), HloOpcode::kAdd,
+        HloInstruction::CreateBinary(slice_shape, HloOpcode::kAdd,
                                      x_slice, y_slice));
     simplifier_->UpdateLayout(add_slice->mutable_shape());
     return ReplaceInstruction(dynamic_slice, add_slice);

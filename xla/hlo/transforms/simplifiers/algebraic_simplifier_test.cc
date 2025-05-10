@@ -13661,19 +13661,19 @@ TEST_F(AlgebraicSimplifierTest, DynamicSliceAdd)
     test {
       arg.x = s32[10,10000] parameter(0)
       arg.y = s32[10,10000] parameter(1)
-      arg.i = s32[2] parameter(2)
-      arg.s = s32[2] parameter(3)
+      arg.i = s32[] parameter(2)
+      arg.s = s32[] parameter(3)
 
       add.xy = s32[10,10000] add(arg.x, arg.y)
-      ROOT dynamic-slice.xy = s32[5,5000] dynamic-slice(add.xy, arg.i, arg.s), dynamic_slice_sizes={2, 2000}
+      ROOT dynamic-slice.xy = s32[5,5000] dynamic-slice(add.xy, arg.i, arg.s), dynamic_slice_sizes={5,5000}
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Add(m::DynamicSlice(m::Parameter(0), m::Parameter(2)),
-                                m::DynamicSlice(m::Parameter(1), m::Parameter(2)))));
+              GmockMatch(m::Add(m::DynamicSlice(m::Parameter(0), m::Parameter(2), m::Parameter(3)),
+                                m::DynamicSlice(m::Parameter(1), m::Parameter(2), m::Parameter(3)))));
 }
 
 }  // namespace
