@@ -13728,13 +13728,13 @@ TEST_F(AlgebraicSimplifierTest, ConcatenatePadPad)
   const char* kModuleStr = R"(
     HloModule m
     test {
-      arg.a = s8[5,10] parameter(0)
-      arg.b = s8[10,5] parameter(1)
+      arg.a = s8[10,8] parameter(0)
+      arg.b = s8[10,4] parameter(1)
       arg.v = s8[] parameter(2)
 
-      pad.a = s8[10,10] pad(arg.a, arg.v), padding=5_0x0_0
-      pad.b = s8[10,10] pad(arg.b, arg.v), padding=0_0x0_5
-      ROOT concat = s8[20,10] concatenate(pad.a, pad.b), dimensions={0}
+      arg.a.pad = s8[10,12] pad(arg.a, arg.v), padding=0_0x4_0
+      arg.b.pad = s8[10,12] pad(arg.b, arg.v), padding=0_0x0_8
+      ROOT concat = s8[10,24] concatenate(arg.a.pad, arg.b.pad), dimensions={1}
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
