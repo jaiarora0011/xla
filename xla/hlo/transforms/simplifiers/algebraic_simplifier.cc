@@ -4707,6 +4707,22 @@ absl::Status AlgebraicSimplifierVisitor::HandleMaximum(
     return absl::OkStatus();
   }
 
+  // CS526
+  // max(max(x, y), max(z, y)) -> max(max(x, z), y)
+  VLOG(10) << "Trying to transform max(max(x, y), max(z, y)) to "
+           << "max(max(x, z), y): " << maximum->ToString();
+  HloInstruction *x, *y, *z;
+  if ((Match(lhs, m::Maximum(m::Op(&x), m::Op(&y))) &&
+       Match(rhs, m::MaximumAnyOrder(m::Op(&z), m::Op().Is(y)))) ||
+      (Match(lhs, m::Maximum(m::Op(&y), m::Op(&x))) &&
+       Match(rhs, m::MaximumAnyOrder(m::Op().Is(y), m::Op(&z))))) {
+    TF_ASSIGN_OR_RETURN(auto max_xz, MakeBinaryHlo(HloOpcode::kMaximum, x, z));
+    TF_ASSIGN_OR_RETURN(auto new_maximum,
+                        MakeBinaryHlo(HloOpcode::kMaximum, max_xz, y));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(maximum, new_maximum));
+    return absl::OkStatus();
+  }
+
   return absl::OkStatus();
 }
 
@@ -4790,6 +4806,22 @@ absl::Status AlgebraicSimplifierVisitor::HandleMinimum(
       !primitive_util::IsFloatingPointType(minimum->shape().element_type()) &&
       IsNonNegative(rhs, options_) &&
       ReplaceInstructionIfCompatible(minimum, lhs)) {
+    return absl::OkStatus();
+  }
+
+  // CS526
+  // min(min(x, y), min(z, y)) -> min(min(x, z), y)
+  VLOG(10) << "Trying to transform min(min(x, y), min(z, y)) to "
+           << "min(min(x, z), y): " << minimum->ToString();
+  HloInstruction *x, *y, *z;
+  if ((Match(lhs, m::Minimum(m::Op(&x), m::Op(&y))) &&
+       Match(rhs, m::MinimumAnyOrder(m::Op(&z), m::Op().Is(y)))) ||
+      (Match(lhs, m::Minimum(m::Op(&y), m::Op(&x))) &&
+       Match(rhs, m::MinimumAnyOrder(m::Op().Is(y), m::Op(&z))))) {
+    TF_ASSIGN_OR_RETURN(auto min_xz, MakeBinaryHlo(HloOpcode::kMinimum, x, z));
+    TF_ASSIGN_OR_RETURN(auto new_minimum,
+                        MakeBinaryHlo(HloOpcode::kMinimum, min_xz, y));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(minimum, new_minimum));
     return absl::OkStatus();
   }
 
@@ -7377,6 +7409,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleSlice(HloInstruction* slice) {
   // CS526
   // slice(reduce(x, dims), s, e, p) ->
   //    reduce(slice(x, s, e, p), dims)
+  VLOG(10) << "Trying to simplify slice of reduce: " << slice->ToString();
   HloInstruction* reduce = slice->mutable_operand(0);
   if (Match(reduce, m::Reduce())) {
     HloInstruction* x = reduce->mutable_operand(0);
@@ -7704,6 +7737,8 @@ absl::Status AlgebraicSimplifierVisitor::HandleDynamicSlice(
   // CS526
   // dynamic_slice(reduce(x, dims), i, s) ->
   //    reduce(dynamic_slice(x, i, s), dims)
+  VLOG(10) << "Trying to simplify dynamic slice of reduce: "
+           << dynamic_slice->ToString();
   if (Match(operand, m::Reduce())) {
     HloInstruction* x = operand->mutable_operand(0);
     std::vector<HloInstruction*> new_ds_operands;

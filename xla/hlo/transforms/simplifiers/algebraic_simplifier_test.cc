@@ -13645,5 +13645,47 @@ TEST_F(AlgebraicSimplifierTest, SliceMinReduceTest) {
       GmockMatch(m::Reduce(m::Slice(m::Parameter(0)), m::ConstantScalar(0))));
 }
 
+TEST_F(AlgebraicSimplifierTest, MaxMaxTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    ENTRY main {
+      arg.0 = s8[3,4] parameter(0)
+      arg.1 = s8[3,4] parameter(1)
+      arg.2 = s8[3,4] parameter(2)
+
+      max.1 = s8[3,4] maximum(arg.1, arg.0)
+      max.2 = s8[3,4] maximum(arg.2, arg.1)
+      ROOT max.3 = s8[3,4] maximum(max.1, max.2)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Maximum(m::Maximum(m::Parameter(0), m::Parameter(2)),
+                            m::Parameter(1))));
+}
+
+TEST_F(AlgebraicSimplifierTest, MinMinTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    ENTRY main {
+      arg.0 = s8[3,4] parameter(0)
+      arg.1 = s8[3,4] parameter(1)
+      arg.2 = s8[3,4] parameter(2)
+
+      min.1 = s8[3,4] minimum(arg.0, arg.1)
+      min.2 = s8[3,4] minimum(arg.1, arg.2)
+      ROOT min.3 = s8[3,4] minimum(min.1, min.2)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Minimum(m::Minimum(m::Parameter(0), m::Parameter(2)),
+                            m::Parameter(1))));
+}
+
 }  // namespace
 }  // namespace xla
