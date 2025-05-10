@@ -1180,7 +1180,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
     return ReplaceInstruction(add, lhs);
   }
 
-  // CS526
+  //- CS526
   // Implement Add(X, Mul(X, Y)) ==> Mul(X, Add(1, Y))
   HloInstruction* x;
   HloInstruction* y;
@@ -1196,18 +1196,20 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
     HloInstruction* new_multiply = add->AddInstruction(
         HloInstruction::CreateBinary(rhs->shape(), HloOpcode::kMultiply, x,
                                      add_one));
+    std::cout << "[CS526][rule-6-applied]" << std::endl;
     return ReplaceInstruction(add, new_multiply);
   }
 
-  // CS526
+  //- CS526
   // Implement Add(X, Neg(X)) ==> 0
   if (Match(add, m::Add(m::Op(&lhs), m::Op(&rhs))) &&
       (Match(rhs, m::Negate(m::Op().Is(lhs))) || 
       Match(lhs, m::Negate(m::Op().Is(rhs))))) {
+    std::cout << "[CS526][rule-7-applied]" << std::endl;
   return ReplaceInstruction(add, MakeScalarLike(add, 0));      
   }
 
-  // CS526
+  //- CS526
   // Implement Add(Neg(X), Neg(Y)) ==> Neg(Add(X, Y))
   if (Match(add, m::Add(m::Op(&lhs), m::Op(&rhs))) &&
       Match(lhs, m::Negate(m::Op(&x))) &&
@@ -1217,12 +1219,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
         HloInstruction::CreateBinary(add->shape(), HloOpcode::kAdd, x, y));
     HloInstruction* neg = add->AddInstruction(
         HloInstruction::CreateUnary(add->shape(), HloOpcode::kNegate, neg_add));
+    std::cout << "[CS526][rule-34-applied]" << std::endl;
     return ReplaceInstruction(add, neg);
   }
 
-  // CS526
+  //- CS526
   // Implement Add(Dot(X, Y, C, PHI), Dot(X, Z, C, PHI)) ==> Dot(X, Add(Y, Z), C, PHI)
-
   HloInstruction* z;
   HloInstruction* phi;
   if (Match(lhs, m::Dot(m::Op(&x), m::Op(&y))) &&
@@ -1279,11 +1281,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
             HloInstruction::CreateBinary(x->shape(), HloOpcode::kAdd, y, z));
         HloInstruction* dot = lhs->AddInstruction(
             HloInstruction::CreateDot(add->shape(), x, inner_add, lhs_dims, lhs->precision_config()));
+            std::cout << "[CS526][rule-98-applied]" << std::endl;
         return ReplaceInstruction(add, dot);
       }
     }
   }
-  // CS526
+  //- CS526
   // Implement Add(Reduce(add, X, dims), Reduce(add, Y, dims)) ==> Reduce(add, Add(X, Y), dims)
   HloInstruction* x_reduce;
   HloInstruction* y_reduce;
@@ -1316,13 +1319,14 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
           HloInstruction::CreateReduce(add->shape(), inner_add, x_init,
                                        lhs_reduce_dims, lhs_computation));
 
+      std::cout << "[CS526][rule-65-applied]" << std::endl;
       return ReplaceInstruction(add, reduce);
     }
     
   }
 
 
-  // CS526 
+  //- CS526 
   // Implement C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C in {Add, Mul, Sub, Div}
   HloInstruction* u;
   HloInstruction* v;
@@ -1343,6 +1347,8 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
           HloInstruction::CreateBinary(u->shape(), HloOpcode::kAdd, u, v));
       auto concat1 = lhs->AddInstruction(
           HloInstruction::CreateConcatenate(lhs->shape(), {inner_add1, inner_add2}, lhs_concat_dim));
+      
+      std::cout << "[CS526][rule-30-applied][add]" << std::endl;
       return ReplaceInstruction(add, concat1);
     }
   }
@@ -1354,9 +1360,10 @@ absl::Status AlgebraicSimplifierVisitor::HandleXor(HloInstruction* xor_op) {
   HloInstruction *lhs, *rhs;
   CHECK(Match(xor_op, m::Xor(m::Op(&lhs), m::Op(&rhs))));
 
-  // CS526
+  //- CS526
   // Implement Binary(Xor, A, A) ==> Constant(0, shape(A))
   if (Match(lhs, m::Op().Is(rhs))) {
+    std::cout << "[CS526][rule-53-applied]" << std::endl;
     return ReplaceInstruction(xor_op, MakeScalarLike(xor_op, false));
   }
 
@@ -1369,9 +1376,10 @@ absl::Status AlgebraicSimplifierVisitor::HandleShiftRightLogical(
           m::ShiftRightLogical(m::Op(&lhs),
           m::Op(&rhs))));
 
-  // CS526
+  //- CS526
   // Implement Binary(ShiftRightLogical, A, Constant(0, S)) ==> A
   if (Match(rhs, m::ConstantEffectiveScalar(0))) {
+    std::cout << "[CS526][rule-54-applied]" << std::endl;
     return ReplaceInstruction(shift_right_logical, lhs);
   }
 }
@@ -1383,9 +1391,10 @@ absl::Status AlgebraicSimplifierVisitor::HandleShiftRightArithmetic(
           m::ShiftRightArithmetic(m::Op(&lhs),
           m::Op(&rhs))));
 
-  // CS526
+  //- CS526
   // Implement Binary(ShiftRightArithmetic, A, Constant(0, S)) ==> A
   if (Match(rhs, m::ConstantEffectiveScalar(0))) {
+    std::cout << "[CS526][rule-55-applied]" << std::endl;
     return ReplaceInstruction(shift_right_arithmetic, lhs);
   }
 }
@@ -1395,9 +1404,10 @@ absl::Status AlgebraicSimplifierVisitor::HandleShiftLeft(
   HloInstruction *lhs, *rhs;
   CHECK(Match(shift_left, m::ShiftLeft(m::Op(&lhs), m::Op(&rhs))));
 
-  // CS526
+  //- CS526
   // Implement Binary(ShiftLeft, A, Constant(0, S)) ==> A
   if (Match(rhs, m::ConstantEffectiveScalar(0))) {
+    std::cout << "[CS526][rule-56-applied]" << std::endl;
     return ReplaceInstruction(shift_left, lhs);
   }
 }
@@ -1511,10 +1521,11 @@ absl::Status AlgebraicSimplifierVisitor::HandleAnd(
     return absl::OkStatus();
   }
 
-  // CS526
+  //- CS526
   // Implement And(X, Not(X)) ==> False
   if (Match(logical_and, m::And(m::Op(&lhs), m::Op(&rhs))) &&
       Match(rhs, m::Not(m::Op().Is(lhs)))) {
+        std::cout << "[CS526][rule-132-applied]" << std::endl;
         return ReplaceInstruction(logical_and, MakeScalarLike(logical_and, false)); 
   }
 
@@ -1522,6 +1533,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAnd(
   // Implement And(X, X) ==> X
   if (Match(logical_and, m::And(m::Op(&lhs), m::Op(&rhs))) &&
       Match(rhs, m::Op().Is(lhs))) {
+        std::cout << "[CS526][rule-134-applied]" << std::endl;
         return ReplaceInstruction(logical_and, lhs); 
   }
 
