@@ -13630,7 +13630,7 @@ TEST_F(AlgebraicSimplifierTest, AddReduce)
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Reduce(m::Add(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
+              GmockMatch(m::Reduce(m::Add(m::Parameter(0), m::Parameter(1)), m::Constant())));
 }
 
 }  // namespace
