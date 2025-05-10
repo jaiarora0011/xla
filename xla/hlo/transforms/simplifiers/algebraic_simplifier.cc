@@ -9543,6 +9543,45 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
                                      new_select_x, new_select_z));
   }
 
+  // CS526
+  // Implement Select(P, Sub(X, Z), Sub(Y, W)) ==> Sub(Select(P, X, Y), Select(P, Z, W))
+  HloInstruction* sub_xz;
+  HloInstruction* sub_yw;
+  if (Match(select, m::Select(m::Op(&pred), m::Op(&sub_xz),
+                              m::Op(&sub_yw))) &&
+      Match(sub_xz, m::Subtract(m::Op(&x), m::Op(&z))) &&
+      Match(sub_yw, m::Subtract(m::Op(&y), m::Op(&w)))) {
+    HloInstruction* new_select_x =
+        select->AddInstruction(HloInstruction::CreateTernary(
+            x->shape(), HloOpcode::kSelect, pred, x, y));
+    HloInstruction* new_select_z =
+        select->AddInstruction(HloInstruction::CreateTernary(
+            z->shape(), HloOpcode::kSelect, pred, z, w));
+    return ReplaceWithNewInstruction(
+        select,
+        HloInstruction::CreateBinary(select->shape(), HloOpcode::kSubtract,
+                                     new_select_x, new_select_z));
+  }
+
+  // CS526
+  // Implement Select(P, Multiply(X, Z), Multiply(Y, W)) ==> Multiply(Select(P, X, Y), Select(P, Z, W))
+  HloInstruction* mul_xz;
+  HloInstruction* mul_yw;
+  if (Match(select, m::Select(m::Op(&pred), m::Op(&mul_xz),
+                              m::Op(&mul_yw))) &&
+      Match(mul_xz, m::Multiply(m::Op(&x), m::Op(&z))) &&
+      Match(mul_yw, m::Multiply(m::Op(&y), m::Op(&w)))) {
+    HloInstruction* new_select_x =
+        select->AddInstruction(HloInstruction::CreateTernary(
+            x->shape(), HloOpcode::kSelect, pred, x, y));
+    HloInstruction* new_select_z =
+        select->AddInstruction(HloInstruction::CreateTernary(
+            z->shape(), HloOpcode::kSelect, pred, z, w));
+    return ReplaceWithNewInstruction(
+        select,
+        HloInstruction::CreateBinary(select->shape(), HloOpcode::kMultiply,
+                                     new_select_x, new_select_z));
+  }
 
   // select(pred, xs, dynamic_update_slice(xs, x, i))
   //     -> dynamic_update_slice(xs, select(pred, dynamic_slice(xs, i), x), i)

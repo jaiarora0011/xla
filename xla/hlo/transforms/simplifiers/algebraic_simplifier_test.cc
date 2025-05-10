@@ -13600,6 +13600,52 @@ TEST_F(AlgebraicSimplifierTest, SelectAddAdd)
               GmockMatch(m::Add(m::Select(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
                                 m::Select(m::Parameter(0), m::Parameter(3), m::Parameter(4)))));
 }
+TEST_F(AlgebraicSimplifierTest, SelectSubSub)
+{
+  // Testing Select(P, Sub(X, Z), Sub(Y, W)) ==> Sub(Select(P, X, Y), Select(P, Z, W))
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p = pred[8] parameter(0)
+      x = f32[8] parameter(1)
+      y = f32[8] parameter(2)
+      z = f32[8] parameter(3)
+      w = f32[8] parameter(4)
+      sub1 = f32[8] subtract(x, z)
+      sub2 = f32[8] subtract(y, w)
+      ROOT out = f32[8] select(p, sub1, sub2)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Subtract(m::Select(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
+                                     m::Select(m::Parameter(0), m::Parameter(3), m::Parameter(4)))));
+}
+TEST_F(AlgebraicSimplifierTest, SelectMulMul)
+{
+  // Testing Select(P, Mul(X, Z), Mul(Y, W)) ==> Mul(Select(P, X, Y), Select(P, Z, W))
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p = pred[8] parameter(0)
+      x = f32[8] parameter(1)
+      y = f32[8] parameter(2)
+      z = f32[8] parameter(3)
+      w = f32[8] parameter(4)
+      mul1 = f32[8] multiply(x, z)
+      mul2 = f32[8] multiply(y, w)
+      ROOT out = f32[8] select(p, mul1, mul2)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Multiply(m::Select(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
+                                     m::Select(m::Parameter(0), m::Parameter(3), m::Parameter(4)))));
+}
 
 TEST_F(AlgebraicSimplifierTest, MulPad)
 {
