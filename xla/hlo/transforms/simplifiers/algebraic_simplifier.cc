@@ -4659,16 +4659,65 @@ absl::Status AlgebraicSimplifierVisitor::HandleDot(HloInstruction* dot) {
     std::cout << "[CS526][rule-67-applied]" << std::endl;
     return ReplaceInstruction(dot, new_rev);
   }
-
+  
   //- CS526
-  // Dot(Rev(X, dims1), Rev(Y, dims2), C, B) ==> Rev(Dot(X, Y, C, B), dims)
+  // Implement Dot(Rev(X, dims1), Rev(Y, dims2), C, B) ==> Rev(Dot(X, Y, C, B), dims)
+  // Implement Dot(Rev(X, C2), Rev(Y, C2), C1 ∪ C2, B) ==> Dot(X, Y, C1 ∪ C2, B)
+  // Implement Dot(Rev(X, B2), Rev(Y, B2), C, B1 ∪ B2) ==> Rev(Dot(X, Y, C, B1 ∪ B2), B2)
   HloInstruction* rev1;
-  HloInstruction* rev2;
+  HloInstruction* rev2; 
   if (Match(dot, m::Dot(m::Reverse(&rev1, m::Op(&x)), m::Reverse(&rev2, m::Op(&y)))))
   {
+    auto dot_dims = dot->dot_dimension_numbers();
     auto rev1_dims = rev1->dimensions();
     auto rev2_dims = rev2->dimensions();
-    auto dot_dims = dot->dot_dimension_numbers();
+
+    auto contracting_dims1 = dot_dims.lhs_contracting_dimensions();
+    auto contracting_dims2 = dot_dims.rhs_contracting_dimensions();
+    auto batch_dims1 = dot_dims.lhs_batch_dimensions();
+    auto batch_dims2 = dot_dims.rhs_batch_dimensions();
+
+    if (rev1_dims == rev2_dims)
+    {
+      // Check if they are a subset of contracting_dims or batch_dims
+      bool is_contracting_subset = true;
+      bool is_batch_subset = true;
+      for (int64_t i = 0; i < rev1_dims.size(); ++i) {
+        if (absl::c_find(contracting_dims1, rev1_dims[i]) ==
+            contracting_dims1.end() &&
+            absl::c_find(contracting_dims2, rev1_dims[i]) ==
+                contracting_dims2.end()) {
+            is_contracting_subset = false;
+          }
+        if (absl::c_find(batch_dims1, rev1_dims[i]) == batch_dims1.end() &&
+            absl::c_find(batch_dims2, rev1_dims[i]) == batch_dims2.end()) {
+            is_batch_subset = false;
+          }
+      }
+
+      if (is_contracting_subset) {
+        // Assuming that is_contracting_subset and is_batch_subset are
+        // mutually exclusive.
+      
+        auto new_dot = dot->AddInstruction(
+            HloInstruction::CreateDot(dot->shape(), x, y, dot_dims,
+                                      dot->precision_config()));
+        std::cout << "[CS526][rule-150-applied]" << std::endl;
+        return ReplaceInstruction(dot, new_dot);
+      } else if (is_batch_subset) {
+        // rev1_dims is a subset of batch_dims
+        auto new_dot = dot->AddInstruction(
+            HloInstruction::CreateDot(dot->shape(), x, y, dot_dims,
+                                      dot->precision_config()));
+        auto new_rev = dot->AddInstruction(
+            HloInstruction::CreateReverse(new_dot->shape(), new_dot, rev1_dims));
+        std::cout << "[CS526][rule-151-applied]" << std::endl;
+        return ReplaceInstruction(dot, new_rev);
+      }
+
+      return absl::OkStatus();
+    }
+
     auto new_dot = dot->AddInstruction(
         HloInstruction::CreateDot(dot->shape(), x, y, dot_dims,
                                   dot->precision_config()));
@@ -4688,7 +4737,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleDot(HloInstruction* dot) {
     std::cout << "[CS526][rule-149-applied]" << std::endl;
     return ReplaceInstruction(dot, new_rev);
   }
-
 
   return absl::OkStatus();
 }

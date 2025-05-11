@@ -13850,6 +13850,58 @@ TEST_F(AlgebraicSimplifierTest, RevDot)
               GmockMatch(m::Reverse(m::Dot(m::Parameter(0), m::Parameter(1)))));
 }
 
+TEST_F(AlgebraicSimplifierTest, RevDot1)
+{
+  // Testing Dot(Rev(X, C2), Rev(Y, C2), C1 ∪ C2, B) ==> Dot(X, Y, C1 ∪ C2, B)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8,16,32,64] parameter(0)
+      y = f32[8,16,32,64] parameter(1)
+      
+      rev_x = f32[8,16,32,64] reverse(x), dimensions={2,3}
+      rev_y = f32[8,16,32,64] reverse(y), dimensions={2,3}
+
+      ROOT result = f32[8,64] dot(rev_x, rev_y), 
+        lhs_contracting_dims={1,2,3}, 
+        rhs_contracting_dims={1,2,3}, 
+        lhs_batch_dims={0}, 
+        rhs_batch_dims={0}
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Dot(m::Parameter(0), m::Parameter(1))));
+}
+
+TEST_F(AlgebraicSimplifierTest, RevDot2)
+{
+  // Testing Dot(Rev(X, B2), Rev(Y, B2), C, B1 ∪ B2) ==> Rev(Dot(X, Y, C, B1 ∪ B2), B2)
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      x = f32[8,4,2,16,32] parameter(0)
+      y = f32[8,4,2,32,64] parameter(1)
+      
+      rev_x = f32[8,4,2,16,32] reverse(x), dimensions={1,2}
+      rev_y = f32[8,4,2,32,64] reverse(y), dimensions={1,2}
+
+      ROOT result = f32[8,4,2,16,64] dot(rev_x, rev_y), 
+        lhs_contracting_dims={4}, 
+        rhs_contracting_dims={3}, 
+        lhs_batch_dims={0,1,2}, 
+        rhs_batch_dims={0,1,2}
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_TRUE(simplifier.Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Reverse(m::Dot(m::Parameter(0), m::Parameter(1)))));
+}
+
 TEST_F(AlgebraicSimplifierTest, ConcatMulMul)
 {
   // Testing Concat(Mul(X, Slice(Z)), Mul(Y, Slice(Z)), dim) ==> Mul(Concat(X, Y, dim), Z)
