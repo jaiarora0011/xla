@@ -5384,15 +5384,21 @@ absl::Status AlgebraicSimplifierVisitor::HandleMaximum(
   //- CS526
   // Implement Max(Max(X, Y), Min(X, Y)) ==> Max(X, Y)
   if (Match(lhs, m::Maximum(m::Op(&x), m::Op(&y))) &&
-      Match(rhs, m::Minimum(m::Op().Is(x), m::Op().Is(y)))) {
+      Match(rhs, m::MinimumAnyOrder(m::Op().Is(x), m::Op().Is(y)))) {
     std::cout << "[CS526][rule-138-applied]" << std::endl;
     return ReplaceInstruction(maximum, lhs);
+  } else if (Match(lhs, m::Minimum(m::Op(&x), m::Op(&y))) &&
+             Match(rhs, m::MaximumAnyOrder(m::Op().Is(x), m::Op().Is(y)))) {
+    std::cout << "[CS526][rule-138-applied]" << std::endl;
+    return ReplaceInstruction(maximum, rhs);
   }
 
   //- CS526
   // Implement Max(Add(X, Z), Add(Y, Z)) ==> Add(Max(X, Y), Z)
-  if (Match(lhs, m::Add(m::Op(&x), m::Op(&z))) &&
-      Match(rhs, m::Add(m::Op(&y), m::Op().Is(z)))) {
+  if ((Match(lhs, m::Add(m::Op(&x), m::Op(&z))) &&
+       Match(rhs, m::AddAnyOrder(m::Op(&y), m::Op().Is(z)))) ||
+      (Match(lhs, m::Add(m::Op(&z), m::Op(&x))) &&
+       Match(rhs, m::AddAnyOrder(m::Op().Is(z), m::Op(&y))))) {
     TF_ASSIGN_OR_RETURN(auto new_maximum,
                         MakeBinaryHlo(HloOpcode::kMaximum, x, y));
     std::cout << "[CS526][rule-125-applied][add]" << std::endl;
@@ -5403,8 +5409,10 @@ absl::Status AlgebraicSimplifierVisitor::HandleMaximum(
 
   //- CS526
   // Implement Max(Mul(X, Z), Mul(Y, Z)) ==> Mul(Max(X, Y), Z)
-  if (Match(lhs, m::Multiply(m::Op(&x), m::Op(&z))) &&
-      Match(rhs, m::Multiply(m::Op(&y), m::Op().Is(z)))) {
+  if ((Match(lhs, m::Multiply(m::Op(&x), m::Op(&z))) &&
+       Match(rhs, m::MultiplyAnyOrder(m::Op(&y), m::Op().Is(z)))) ||
+      (Match(lhs, m::Multiply(m::Op(&z), m::Op(&x))) &&
+       Match(rhs, m::MultiplyAnyOrder(m::Op().Is(z), m::Op(&y))))) {
     TF_ASSIGN_OR_RETURN(auto new_maximum,
                         MakeBinaryHlo(HloOpcode::kMaximum, x, y));
     std::cout << "[CS526][rule-125-applied][multiply]" << std::endl;
@@ -5533,9 +5541,13 @@ absl::Status AlgebraicSimplifierVisitor::HandleMinimum(
   //- CS526
   // Implement Min(Max(X, Y), Min(X, Y)) ==> Min(X, Y)
   if (Match(lhs, m::Maximum(m::Op(&x), m::Op(&y))) &&
-      Match(rhs, m::Minimum(m::Op().Is(x), m::Op().Is(y)))) {
+      Match(rhs, m::MinimumAnyOrder(m::Op().Is(x), m::Op().Is(y)))) {
     std::cout << "[CS526][rule-139-applied]" << std::endl;
     return ReplaceInstruction(minimum, rhs);
+  } else if (Match(lhs, m::Minimum(m::Op(&x), m::Op(&y))) &&
+             Match(rhs, m::MaximumAnyOrder(m::Op().Is(x), m::Op().Is(y)))) {
+    std::cout << "[CS526][rule-139-applied]" << std::endl;
+    return ReplaceInstruction(minimum, lhs);
   }
 
   return absl::OkStatus();
@@ -6010,9 +6022,9 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
 
     if (Match(multiply, m::Multiply(m::Op(&lhs), m::Op(&rhs))) &&
         Match(lhs, m::Pad(&lhs, m::Op(&x), m::Op(&padding_value))) &&
-        (Match(rhs, m::ConstantEffectiveScalar(&b)) ||
-         Match(rhs, m::Broadcast(m::ConstantScalar(&b)))) &&
-        Match(padding_value, m::ConstantScalar(&a))) {
+        Match(rhs, m::Broadcast(m::Op(&b))) &&
+        Match(padding_value, m::Op(&a)) && ShapeUtil::IsScalar(a->shape()) &&
+        ShapeUtil::IsScalar(b->shape())) {
       HloInstruction* broadcast_b = multiply->AddInstruction(
           HloInstruction::CreateBroadcast(x->shape(), b, {}));
 
@@ -6074,7 +6086,8 @@ absl::Status AlgebraicSimplifierVisitor::HandleNegate(HloInstruction* negate) {
   //- CS526
   // Implement Neg(Mul(Neg(X), Y)) ==> Mul(X, Y)
   HloInstruction* y;
-  if (Match(negate, m::Negate(m::Multiply(m::Negate(m::Op(&x)), m::Op(&y))))) {
+  if (Match(negate,
+            m::Negate(m::MultiplyAnyOrder(m::Negate(m::Op(&x)), m::Op(&y))))) {
     auto new_mul = negate->AddInstruction(HloInstruction::CreateBinary(
         negate->shape(), HloOpcode::kMultiply, x, y));
     std::cout << "[CS526][rule-23-applied]" << std::endl;
@@ -6933,6 +6946,7 @@ absl::Status AlgebraicSimplifierVisitor::HandlePad(HloInstruction* pad) {
   // - for any dim, !(H1[dim] < 0 and H2[dim] > 0)
   // This is implemented before the negative padding replacement for
   // better optimization opportunities.
+  VLOG(10) << "Trying to combine pad instructions: " << pad->ToString();
   HloInstruction *inner_pad, *x, *val;
   if (Match(pad, m::Pad(m::Op(&inner_pad), m::Op(&val))) &&
       Match(inner_pad, m::Pad(m::Op(&x), m::Op().Is(val)))) {
