@@ -13831,7 +13831,7 @@ TEST_F(AlgebraicSimplifierTest, DynamicSliceDiv)
 
 TEST_F(AlgebraicSimplifierTest, RevDot)
 {
-  // Testing Dot(Rev(X, dims), Y, PHI, PHI) ==> Rev(Dot(X, Y, PHI, PHI), dims) where PHI is empty
+  // Testing Dot(Rev(X, dims1), Rev(Y, dims2), C, B) ==> Rev(Dot(X, Y, C, B), dims)
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -13839,7 +13839,8 @@ TEST_F(AlgebraicSimplifierTest, RevDot)
       arg.y = s32[10000,10] parameter(1)
 
       rev.x = s32[10,10000] reverse(arg.x), dimensions={1}
-      ROOT dot.xy = s32[10,10000,10000,10] dot(rev.x, arg.y), lhs_contracting_dims={}, rhs_contracting_dims={}
+      rev.y = s32[10000,10] reverse(arg.y), dimensions={0}
+      ROOT dot.xy = s32[10,10] dot(rev.x, rev.y), lhs_contracting_dims={1}, rhs_contracting_dims={0}
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));

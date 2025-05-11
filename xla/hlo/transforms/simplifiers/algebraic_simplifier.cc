@@ -4638,6 +4638,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleDot(HloInstruction* dot) {
 
   //- CS526
   // Implement Dot(Rev(X, dims), Y, PHI, PHI) ==> Rev(Dot(X, Y, PHI, PHI), dims)
+  // This rule is not effective, because of (PHI, PHI) the Dot becomes multiply 
   HloInstruction* rev;
   HloInstruction* x;
   HloInstruction* y;
@@ -4656,6 +4657,35 @@ absl::Status AlgebraicSimplifierVisitor::HandleDot(HloInstruction* dot) {
     auto new_rev = dot->AddInstruction(
         HloInstruction::CreateReverse(new_dot->shape(), new_dot, rev_dims));
     std::cout << "[CS526][rule-67-applied]" << std::endl;
+    return ReplaceInstruction(dot, new_rev);
+  }
+
+  //- CS526
+  // Dot(Rev(X, dims1), Rev(Y, dims2), C, B) ==> Rev(Dot(X, Y, C, B), dims)
+  HloInstruction* rev1;
+  HloInstruction* rev2;
+  if (Match(dot, m::Dot(m::Reverse(&rev1, m::Op(&x)), m::Reverse(&rev2, m::Op(&y)))))
+  {
+    auto rev1_dims = rev1->dimensions();
+    auto rev2_dims = rev2->dimensions();
+    auto dot_dims = dot->dot_dimension_numbers();
+    auto new_dot = dot->AddInstruction(
+        HloInstruction::CreateDot(dot->shape(), x, y, dot_dims,
+                                  dot->precision_config()));
+    std::vector<int64_t> rev_dims;
+    rev_dims.reserve(rev1_dims.size() + rev2_dims.size());
+    // rev_dims is rev_dims1 \Union rev_dims2
+    for (int64_t i = 0; i < rev1_dims.size(); ++i) {
+      rev_dims.push_back(rev1_dims[i]);
+    }
+    for (int64_t i = 0; i < rev2_dims.size(); ++i) {
+      if (absl::c_find(rev_dims, rev2_dims[i]) == rev_dims.end()) {
+        rev_dims.push_back(rev2_dims[i]);
+      }
+    }
+    auto new_rev = dot->AddInstruction(
+        HloInstruction::CreateReverse(new_dot->shape(), new_dot, rev_dims));
+    std::cout << "[CS526][rule-149-applied]" << std::endl;
     return ReplaceInstruction(dot, new_rev);
   }
 
