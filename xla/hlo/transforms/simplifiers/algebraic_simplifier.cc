@@ -10277,7 +10277,9 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
     if (ShapeUtil::SameDimensions(broadcast_pred->shape(),
                                   broadcast_x->shape()) &&
         ShapeUtil::SameDimensions(broadcast_pred->shape(),
-                                  broadcast_y->shape())) {
+                                  broadcast_y->shape()) &&
+        ShapeUtil::SameDimensions(p->shape(),  x->shape()) &&
+        ShapeUtil::SameDimensions(y->shape(),  x->shape())) {
       HloInstruction* new_select =
           select->AddInstruction(HloInstruction::CreateTernary(
               x->shape(), HloOpcode::kSelect, p, x, y));
