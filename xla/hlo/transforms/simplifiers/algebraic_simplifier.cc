@@ -918,7 +918,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
       Match(add, m::Add(m::Add(m::NonConstant(&a),
                                m::Broadcast(m::ConstantScalar(&c1))),
                         m::Broadcast(m::ConstantScalar(&c2))))) {
-    TF_ASSIGN_OR_RETURN(auto* sum_of_constants,
+  TF_ASSIGN_OR_RETURN(auto* sum_of_constants,
                         MakeBinaryHlo(HloOpcode::kAdd, c1, c2));
     if (ShapeUtil::IsScalar(sum_of_constants->shape()) &&
         !ShapeUtil::IsScalar(add->shape())) {
@@ -936,7 +936,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
       Match(add, m::Add(m::Subtract(m::Broadcast(m::ConstantScalar(&c1)),
                                     m::NonConstant(&a)),
                         m::Broadcast(m::ConstantScalar(&c2))))) {
-    TF_ASSIGN_OR_RETURN(HloInstruction * sum_of_constants,
+  TF_ASSIGN_OR_RETURN(HloInstruction * sum_of_constants,
                         MakeBinaryHlo(HloOpcode::kAdd, c1, c2));
     if (ShapeUtil::IsScalar(sum_of_constants->shape()) &&
         !ShapeUtil::IsScalar(add->shape())) {
@@ -973,7 +973,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
                     .WithOpcode(HloOpcode::kDynamicUpdateSlice)
                     .WithOperand(
                         0, m::Broadcast(m::ConstantEffectiveScalar(0)))))) {
-    const Shape& partial_shape = rhs->operand(1)->shape();
+  const Shape& partial_shape = rhs->operand(1)->shape();
     auto sliced_lhs = lhs->AddInstruction(HloInstruction::CreateDynamicSlice(
         partial_shape, lhs, absl::MakeSpan(rhs->operands()).subspan(2),
         partial_shape.dimensions()));
@@ -1053,7 +1053,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
                      Match(rhs->to_apply()->root_instruction(),
                            m::Add(m::Parameter(), m::Parameter()));
   if (rhs_scatter && lhs_scatter) {
-    const auto& lhs_dnums = lhs->scatter_dimension_numbers();
+  const auto& lhs_dnums = lhs->scatter_dimension_numbers();
     const auto& rhs_dnums = rhs->scatter_dimension_numbers();
     std::optional<int64_t> index_concat_dimension;
     std::optional<int64_t> update_concat_dimension;
@@ -1223,8 +1223,236 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
     return absl::OkStatus();
   }
 
+  //- CS526
+  // Implement Add(X, Mul(X, Y)) ==> Mul(X, Add(1, Y))
+
+  if (Match(add, m::Add(m::Op(&x), m::Op(&rhs))) &&
+      (Match(rhs, m::Multiply(m::Op().Is(x), m::Op(&y))) ||
+    Match(rhs, m::Multiply(m::Op(&y), m::Op().Is(x)))))
+  {
+  HloInstruction* multiplier = MakeScalarLike(rhs, 1);
+    HloInstruction* add_one = add->AddInstruction(
+        HloInstruction::CreateBinary(rhs->shape(), HloOpcode::kAdd, multiplier,
+                                     y));
+    HloInstruction* new_multiply = add->AddInstruction(
+        HloInstruction::CreateBinary(rhs->shape(), HloOpcode::kMultiply, x,
+                                     add_one));
+    std::cout << "[CS526][rule-6-applied]" << std::endl;
+    return ReplaceInstruction(add, new_multiply);
+  }
+
+  //- CS526
+  // Implement Add(X, Neg(X)) ==> 0
+  if (Match(add, m::Add(m::Op(&lhs), m::Op(&rhs))) &&
+      (Match(rhs, m::Negate(m::Op().Is(lhs))) || 
+      Match(lhs, m::Negate(m::Op().Is(rhs))))) {
+    std::cout << "[CS526][rule-7-applied]" << std::endl;
+  return ReplaceInstruction(add, MakeScalarLike(add, 0));      
+  }
+
+  //- CS526
+  // Implement Add(Neg(X), Neg(Y)) ==> Neg(Add(X, Y))
+  if (Match(add, m::Add(m::Op(&lhs), m::Op(&rhs))) &&
+      Match(lhs, m::Negate(m::Op(&x))) &&
+      Match(rhs, m::Negate(m::Op(&y)))) 
+  {
+  HloInstruction* neg_add = add->AddInstruction(
+        HloInstruction::CreateBinary(add->shape(), HloOpcode::kAdd, x, y));
+    HloInstruction* neg = add->AddInstruction(
+        HloInstruction::CreateUnary(add->shape(), HloOpcode::kNegate, neg_add));
+    std::cout << "[CS526][rule-34-applied]" << std::endl;
+    return ReplaceInstruction(add, neg);
+  }
+
+  //- CS526
+  // Implement Add(Dot(X, Y, C, PHI), Dot(X, Z, C, PHI)) ==> Dot(X, Add(Y, Z), C, PHI)
+  HloInstruction* z;
+  HloInstruction* phi;
+  if (Match(lhs, m::Dot(m::Op(&x), m::Op(&y))) &&
+      Match(rhs, m::Dot(m::Op().Is(x), m::Op(&z))))
+  {
+    if (ShapeUtil::SameDimensions(lhs->shape(), rhs->shape())) 
+    {
+      auto lhs_dims = lhs->dot_dimension_numbers();
+      auto rhs_dims = rhs->dot_dimension_numbers();
+      
+      // Check equality of contracting dimensions
+      bool contracting_dims_equal = 
+      lhs_dims.lhs_contracting_dimensions_size() == rhs_dims.lhs_contracting_dimensions_size() &&
+      lhs_dims.rhs_contracting_dimensions_size() == rhs_dims.rhs_contracting_dimensions_size();
+
+      if (contracting_dims_equal) {
+        for (int i = 0; i < lhs_dims.lhs_contracting_dimensions_size(); ++i) {
+          if (lhs_dims.lhs_contracting_dimensions(i) != rhs_dims.lhs_contracting_dimensions(i)) {
+            contracting_dims_equal = false;
+            break;
+          }
+        }
+        for (int i = 0; i < lhs_dims.rhs_contracting_dimensions_size(); ++i) {
+          if (lhs_dims.rhs_contracting_dimensions(i) != rhs_dims.rhs_contracting_dimensions(i)) {
+            contracting_dims_equal = false;
+            break;
+          }
+        }
+      }
+
+      bool batch_dims_equal = 
+      lhs_dims.lhs_batch_dimensions_size() == rhs_dims.lhs_batch_dimensions_size() &&
+      lhs_dims.rhs_batch_dimensions_size() == rhs_dims.rhs_batch_dimensions_size();
+      
+      if (batch_dims_equal) {
+        for (int i = 0; i < lhs_dims.lhs_batch_dimensions_size(); ++i) {
+          if (lhs_dims.lhs_batch_dimensions(i) != rhs_dims.lhs_batch_dimensions(i)) {
+            batch_dims_equal = false;
+            break;
+          }
+        }
+        
+        for (int i = 0; i < lhs_dims.rhs_batch_dimensions_size(); ++i) {
+          if (lhs_dims.rhs_batch_dimensions(i) != rhs_dims.rhs_batch_dimensions(i)) {
+            batch_dims_equal = false;
+            break;
+          }
+        }
+      }
+
+      if (contracting_dims_equal && batch_dims_equal)
+      {
+        HloInstruction* inner_add = lhs->AddInstruction(
+            HloInstruction::CreateBinary(x->shape(), HloOpcode::kAdd, y, z));
+        HloInstruction* dot = lhs->AddInstruction(
+            HloInstruction::CreateDot(add->shape(), x, inner_add, lhs_dims, lhs->precision_config()));
+            std::cout << "[CS526][rule-98-applied]" << std::endl;
+        return ReplaceInstruction(add, dot);
+      }
+    }
+  }
+  //- CS526
+  // Implement Add(Reduce(add, X, dims), Reduce(add, Y, dims)) ==> Reduce(add, Add(X, Y), dims)
+  HloInstruction* x_reduce;
+  HloInstruction* y_reduce;
+  HloInstruction* x_init;
+  HloInstruction* y_init;
+  HloComputation* dims1;
+  HloComputation* dims2;
+  if (Match(lhs, m::Reduce(m::Op(&x), m::Op(&x_init))) &&
+      Match(rhs, m::Reduce(m::Op(&y), m::Op(&y_init))))
+  {
+    auto lhs_reduce = Cast<HloReduceInstruction>(lhs);
+    auto rhs_reduce = Cast<HloReduceInstruction>(rhs);
+
+    auto lhs_computation = lhs_reduce->to_apply();
+    auto rhs_computation = rhs_reduce->to_apply();
+
+    auto lhs_reduce_dims = lhs_reduce->dimensions();
+    auto rhs_reduce_dims = rhs_reduce->dimensions();
+
+    if (ShapeUtil::SameDimensions(lhs->shape(), rhs->shape()) &&
+        ShapeUtil::SameDimensions(x->shape(), y->shape()) &&
+        ShapeUtil::SameDimensions(x_init->shape(), y_init->shape()) &&
+        lhs_computation == rhs_computation &&
+        lhs_reduce_dims == rhs_reduce_dims &&
+        x_init == y_init)
+    {
+      HloInstruction* inner_add = lhs->AddInstruction(
+          HloInstruction::CreateBinary(x->shape(), HloOpcode::kAdd, x, y));
+      HloInstruction* reduce = lhs->AddInstruction(
+          HloInstruction::CreateReduce(add->shape(), inner_add, x_init,
+                                       lhs_reduce_dims, lhs_computation));
+
+      std::cout << "[CS526][rule-65-applied]" << std::endl;
+      return ReplaceInstruction(add, reduce);
+    }
+    
+  }
+
+
+  //- CS526 
+  // Implement C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C in {Add, Mul, Sub, Div}
+  HloInstruction* u;
+  HloInstruction* v;
+  HloInstruction* dim;
+  if (Match(lhs, m::Concatenate(m::Op(&x), m::Op(&u))) &&
+      Match(rhs, m::Concatenate(m::Op(&y), m::Op(&v))))
+  {
+    auto lhs_concat_dim = lhs->concatenate_dimension();
+    auto rhs_concat_dim = rhs->concatenate_dimension();
+    if (ShapeUtil::SameDimensions(lhs->shape(), rhs->shape()) &&
+        ShapeUtil::SameDimensions(x->shape(), y->shape()) &&
+        ShapeUtil::SameDimensions(u->shape(), v->shape()) &&
+        lhs_concat_dim == rhs_concat_dim)
+    {
+      auto inner_add1 = lhs->AddInstruction(
+          HloInstruction::CreateBinary(x->shape(), HloOpcode::kAdd, x, y));
+      auto inner_add2 = lhs->AddInstruction(
+          HloInstruction::CreateBinary(u->shape(), HloOpcode::kAdd, u, v));
+      auto concat1 = lhs->AddInstruction(
+          HloInstruction::CreateConcatenate(lhs->shape(), {inner_add1, inner_add2}, lhs_concat_dim));
+      
+      std::cout << "[CS526][rule-30-applied][add]" << std::endl;
+      return ReplaceInstruction(add, concat1);
+    }
+  }
+
   return absl::OkStatus();
 }
+
+absl::Status AlgebraicSimplifierVisitor::HandleXor(HloInstruction* xor_op) {
+  HloInstruction *lhs, *rhs;
+  CHECK(Match(xor_op, m::Xor(m::Op(&lhs), m::Op(&rhs))));
+
+  //- CS526
+  // Implement Binary(Xor, A, A) ==> Constant(0, shape(A))
+  if (Match(lhs, m::Op().Is(rhs))) {
+    std::cout << "[CS526][rule-53-applied]" << std::endl;
+    return ReplaceInstruction(xor_op, MakeScalarLike(xor_op, false));
+  }
+
+}
+
+absl::Status AlgebraicSimplifierVisitor::HandleShiftRightLogical(
+    HloInstruction* shift_right_logical) {
+  HloInstruction *lhs, *rhs;
+  CHECK(Match(shift_right_logical, 
+          m::ShiftRightLogical(m::Op(&lhs),
+          m::Op(&rhs))));
+
+  //- CS526
+  // Implement Binary(ShiftRightLogical, A, Constant(0, S)) ==> A
+  if (Match(rhs, m::ConstantEffectiveScalar(0))) {
+    std::cout << "[CS526][rule-54-applied]" << std::endl;
+    return ReplaceInstruction(shift_right_logical, lhs);
+  }
+}
+
+absl::Status AlgebraicSimplifierVisitor::HandleShiftRightArithmetic(
+    HloInstruction* shift_right_arithmetic) {
+  HloInstruction *lhs, *rhs;
+  CHECK(Match(shift_right_arithmetic, 
+          m::ShiftRightArithmetic(m::Op(&lhs),
+          m::Op(&rhs))));
+
+  //- CS526
+  // Implement Binary(ShiftRightArithmetic, A, Constant(0, S)) ==> A
+  if (Match(rhs, m::ConstantEffectiveScalar(0))) {
+    std::cout << "[CS526][rule-55-applied]" << std::endl;
+    return ReplaceInstruction(shift_right_arithmetic, lhs);
+  }
+}
+
+absl::Status AlgebraicSimplifierVisitor::HandleShiftLeft(
+    HloInstruction* shift_left) {
+  HloInstruction *lhs, *rhs;
+  CHECK(Match(shift_left, m::ShiftLeft(m::Op(&lhs), m::Op(&rhs))));
+
+  //- CS526
+  // Implement Binary(ShiftLeft, A, Constant(0, S)) ==> A
+  if (Match(rhs, m::ConstantEffectiveScalar(0))) {
+    std::cout << "[CS526][rule-56-applied]" << std::endl;
+    return ReplaceInstruction(shift_left, lhs);
+  }
+}
+
 
 absl::StatusOr<bool> AlgebraicSimplifierVisitor::TrySimplifyTautologicalCompare(
     HloInstruction* conjunction) {
@@ -1332,6 +1560,22 @@ absl::Status AlgebraicSimplifierVisitor::HandleAnd(
                       TrySimplifyTautologicalCompare(logical_and));
   if (found_tautological_compare) {
     return absl::OkStatus();
+  }
+
+  //- CS526
+  // Implement And(X, Not(X)) ==> False
+  if (Match(logical_and, m::And(m::Op(&lhs), m::Op(&rhs))) &&
+      Match(rhs, m::Not(m::Op().Is(lhs)))) {
+        std::cout << "[CS526][rule-132-applied]" << std::endl;
+        return ReplaceInstruction(logical_and, MakeScalarLike(logical_and, false)); 
+  }
+
+  //- CS526
+  // Implement And(X, X) ==> X
+  if (Match(logical_and, m::And(m::Op(&lhs), m::Op(&rhs))) &&
+      Match(rhs, m::Op().Is(lhs))) {
+        std::cout << "[CS526][rule-134-applied]" << std::endl;
+        return ReplaceInstruction(logical_and, lhs); 
   }
 
   return absl::OkStatus();
@@ -1964,6 +2208,219 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
           HloInstruction::CreateIota(concatenate->shape(), first_iota_dim));
     }
   }
+  
+  //- CS526
+  // Implement Concat(Broadcast(X, S), Broadcast(Y, S), dim) ==> Broadcast(Concat(X, Y, dim), S)
+  HloInstruction* x;
+  HloInstruction* y;
+  if (Match(operands[0], m::Broadcast(m::Op(&x))) &&
+      Match(operands[1], m::Broadcast(m::Op(&y)))) 
+      {
+        auto dim = concatenate->concatenate_dimension();
+        if (x->shape().dimensions().size() > dim &&
+            y->shape().dimensions().size() > dim) {
+              auto x_shape = x->shape();
+              auto y_shape = y->shape();
+              Shape new_shape = x_shape;
+              for (int i = 0; i < new_shape.dimensions_size(); ++i) {
+                if (i == dim) {
+                  new_shape.set_dimensions(i,
+                    x_shape.dimensions(i) + y_shape.dimensions(i));
+                }
+              }
+
+            auto new_concat = operands[0]->AddInstruction(
+              HloInstruction::CreateConcatenate(
+                  new_shape,
+                  {x, y}, dim));
+            auto new_broadcast = operands[0]->AddInstruction(
+                HloInstruction::CreateBroadcast(
+                    concatenate->shape(), new_concat, operands[0]->dimensions()));
+            std::cout << "[CS526][rule-16-applied]" << std::endl;
+            return ReplaceInstruction(concatenate, new_broadcast); 
+          }
+      }
+
+
+  //- CS526
+  // Implement Concat(Mul(X, Slice(Z)), Mul(Y, Slice(Z)), dim) ==> Mul(Concat(X, Y, dim), Z)
+  HloInstruction* z;
+  if (Match(operands[0], m::MultiplyAnyOrder(m::Op(&x), m::Slice(m::Op(&z)))) &&
+      Match(operands[1], m::MultiplyAnyOrder(m::Op(&y), m::Slice(m::Op().Is(z))))) {
+        auto dim = concatenate->concatenate_dimension();
+        auto x_shape = x->shape();
+        auto y_shape = y->shape();
+
+        Shape new_shape = x_shape;
+        for (int i = 0; i < new_shape.dimensions_size(); ++i) {
+          if (i == dim) {
+            new_shape.set_dimensions(i,
+              x_shape.dimensions(i) + y_shape.dimensions(i));
+          }
+        }
+        auto new_concat = operands[0]->AddInstruction(
+          HloInstruction::CreateConcatenate(
+              new_shape,
+              {x, y}, dim));
+        auto new_mul = operands[0]->AddInstruction(
+            HloInstruction::CreateBinary(
+                concatenate->shape(), HloOpcode::kMultiply, new_concat, z));
+                std::cout << "[CS526][rule-110-applied][multiply]" << std::endl;
+        return ReplaceInstruction(concatenate, new_mul);
+      }
+
+  //- CS526
+  // Implement Concat(Add(X, Slice(Z)), Add(Y, Slice(Z)), dim) ==> Add(Concat(X, Y, dim), Z)
+  if (Match(operands[0], m::AddAnyOrder(m::Op(&x), m::Slice(m::Op(&z)))) &&
+      Match(operands[1], m::AddAnyOrder(m::Op(&y), m::Slice(m::Op().Is(z))))) {
+        auto dim = concatenate->concatenate_dimension();
+        auto x_shape = x->shape();
+        auto y_shape = y->shape();
+
+        Shape new_shape = x_shape;
+        for (int i = 0; i < new_shape.dimensions_size(); ++i) {
+          if (i == dim) {
+            new_shape.set_dimensions(i,
+              x_shape.dimensions(i) + y_shape.dimensions(i));
+          }
+        }
+        auto new_concat = operands[0]->AddInstruction(
+          HloInstruction::CreateConcatenate(
+              new_shape,
+              {x, y}, dim));
+        auto new_add = operands[0]->AddInstruction(
+            HloInstruction::CreateBinary(
+                concatenate->shape(), HloOpcode::kAdd, new_concat, z));
+        std::cout << "[CS526][rule-110-applied][add]" << std::endl;
+        return ReplaceInstruction(concatenate, new_add);
+      }
+
+  //- CS526
+  // Implement Concat(Subtract(X, Slice(Z)), Subtract(Y, Slice(Z)), dim) ==> Subtract(Concat(X, Y, dim), Z)
+  if (Match(operands[0], m::Subtract(m::Op(&x), m::Slice(m::Op(&z)))) &&
+      Match(operands[1], m::Subtract(m::Op(&y), m::Slice(m::Op().Is(z))))) {
+        auto dim = concatenate->concatenate_dimension();
+        auto x_shape = x->shape();
+        auto y_shape = y->shape();
+
+        Shape new_shape = x_shape;
+        for (int i = 0; i < new_shape.dimensions_size(); ++i) {
+          if (i == dim) {
+            new_shape.set_dimensions(i,
+              x_shape.dimensions(i) + y_shape.dimensions(i));
+          }
+        }
+        auto new_concat = operands[0]->AddInstruction(
+          HloInstruction::CreateConcatenate(
+              new_shape,
+              {x, y}, dim));
+        auto new_subtract = operands[0]->AddInstruction(
+            HloInstruction::CreateBinary(
+                concatenate->shape(), HloOpcode::kSubtract, new_concat, z));
+        std::cout << "[CS526][rule-110-applied][subtract]" << std::endl;
+        return ReplaceInstruction(concatenate, new_subtract);
+      }
+
+  //- CS526
+  // Implement Concat(Divide(X, Slice(Z)), Divide(Y, Slice(Z)), dim) ==> Divide(Concat(X, Y, dim), Z)
+  if (Match(operands[0], m::Divide(m::Op(&x), m::Slice(m::Op(&z)))) &&
+      Match(operands[1], m::Divide(m::Op(&y), m::Slice(m::Op().Is(z))))) {
+        auto dim = concatenate->concatenate_dimension();
+        auto x_shape = x->shape();
+        auto y_shape = y->shape();
+
+        Shape new_shape = x_shape;
+        for (int i = 0; i < new_shape.dimensions_size(); ++i) {
+          if (i == dim) {
+            new_shape.set_dimensions(i,
+              x_shape.dimensions(i) + y_shape.dimensions(i));
+          }
+        }
+        auto new_concat = operands[0]->AddInstruction(
+          HloInstruction::CreateConcatenate(
+              new_shape,
+              {x, y}, dim));
+        auto new_divide = operands[0]->AddInstruction(
+            HloInstruction::CreateBinary(
+                concatenate->shape(), HloOpcode::kDivide, new_concat, z));
+        std::cout << "[CS526][rule-110-applied][divide]" << std::endl;
+        return ReplaceInstruction(concatenate, new_divide);
+      }
+
+  //- CS526
+  // Implement Concatenate(Pad(A, v, low, 0, int), Pad(B, v, 0, high, int), dim) ==> 
+  // Pad(Concatenate(A, B, dim), v, low, high, int)
+  // if int = 0 && low + Shape(A) >= 0 && high + Shape(B) >= 0
+  HloInstruction* v1;
+  HloInstruction* v2;
+  HloInstruction* pad_a;
+  HloInstruction* a;
+  HloInstruction* pad_b;
+  HloInstruction* b;
+  HloInstruction* low;
+  HloInstruction* high;
+  HloInstruction* interior;
+  
+  if (Match(concatenate, m::Concatenate(
+          m::Pad(&pad_a, m::Op(&a), m::Op(&v1)),
+          m::Pad(&pad_b, m::Op(&b), m::Op(&v2)))))
+  {
+    auto dim = concatenate->concatenate_dimension();
+    auto pad_a_config = pad_a->padding_config();
+    auto pad_b_config = pad_b->padding_config();
+
+    if (pad_a_config.dimensions_size() != pad_b_config.dimensions_size() ||  v1 != v2 ||
+      (a->shape().dimensions_size() != b->shape().dimensions_size())) {
+      return absl::OkStatus();
+    }
+
+    for (int i = 0; i < a->shape().dimensions_size(); ++i) {
+      if (i != dim && a->shape().dimensions(i) != b->shape().dimensions(i)) {
+        return absl::OkStatus();
+      }
+    }
+
+    auto a_shape = a->shape();
+    auto b_shape = b->shape();
+    auto new_padding_config = pad_a_config;
+    for (int i = 0; i < pad_a_config.dimensions_size(); ++i) {
+      auto pad_a_dim = pad_a_config.dimensions(i);
+      auto pad_b_dim = pad_b_config.dimensions(i);
+
+      if (pad_a_dim.edge_padding_high() != 0 ||
+          pad_b_dim.edge_padding_low() != 0 ||
+          pad_a_dim.interior_padding() != 0 ||
+          pad_b_dim.interior_padding() != 0) {
+        return absl::OkStatus();
+      }
+      if (pad_a_dim.edge_padding_low() + a_shape.dimensions(i) < 0 ||
+          pad_b_dim.edge_padding_high() + b_shape.dimensions(i) < 0) {
+        return absl::OkStatus();
+      }
+      new_padding_config.mutable_dimensions(i)->set_edge_padding_low(
+          pad_a_dim.edge_padding_low());
+      new_padding_config.mutable_dimensions(i)->set_edge_padding_high(
+          pad_b_dim.edge_padding_high());
+      new_padding_config.mutable_dimensions(i)->set_interior_padding(
+          pad_a_dim.interior_padding());
+    }
+
+    auto new_concat_shape = a_shape;
+    for (int i = 0; i < new_concat_shape.dimensions_size(); ++i) {
+      if (i == dim) {
+        new_concat_shape.set_dimensions(i,
+            a_shape.dimensions(i) + b_shape.dimensions(i));
+      }
+    }
+    auto new_concat = concatenate->AddInstruction(
+        HloInstruction::CreateConcatenate(
+            new_concat_shape, {a, b}, dim));
+    auto new_pad = concatenate->AddInstruction(
+        HloInstruction::CreatePad(
+            concatenate->shape(), new_concat, v1, new_padding_config));
+    std::cout << "[CS526][rule-117-applied]" << std::endl;
+    return ReplaceInstruction(concatenate, new_pad);
+  }
 
   if (operands.size() == 2) {
     // A binary concat with a broadcasted scalar as an operand can be converted
@@ -2015,6 +2472,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
         MakeBroadcastHlo(MakeReshapeHlo(new_shape, operands[0]).value(),
                          broadcast_dims, concatenate->shape()));
   }
+
   return absl::OkStatus();
 }
 
@@ -2204,6 +2662,28 @@ absl::Status AlgebraicSimplifierVisitor::HandleSubtract(HloInstruction* sub) {
     return absl::OkStatus();
   }
 
+  //- CS526
+  // Implement Sub(Div(X, Y), Div(Z, Y)) ==> Div(Sub(X, Z), Y)
+  HloInstruction* lhs_dividend;
+  HloInstruction* rhs_dividend;
+  HloInstruction* lhs_divisor;
+  HloInstruction* rhs_divisor;
+
+  if (Match(sub, m::Subtract(m::Divide(m::Op(&lhs_dividend), m::Op(&lhs_divisor)),
+                             m::Divide(m::Op(&rhs_dividend), m::Op(&rhs_divisor))))) {
+    if (lhs_divisor == rhs_divisor) {
+      HloInstruction* new_sub = sub->AddInstruction(
+          HloInstruction::CreateBinary(sub->shape(), HloOpcode::kSubtract,
+                                       lhs_dividend, rhs_dividend));
+      HloInstruction* new_div = sub->AddInstruction(
+          HloInstruction::CreateBinary(sub->shape(), HloOpcode::kDivide,
+                                       new_sub, lhs_divisor));
+      std::cout << "[CS526][rule-10-applied]" << std::endl;
+      return ReplaceInstruction(sub, new_div);
+    }
+  }
+
+
   // Canonicalize subtraction of a constant to addition.
   VLOG(10) << "trying transform [A - Const => A + (-Const)]";
   if (Match(sub, m::Subtract(m::NonConstant(&lhs), m::Constant(&rhs))) ||
@@ -2242,6 +2722,35 @@ absl::Status AlgebraicSimplifierVisitor::HandleSubtract(HloInstruction* sub) {
         MakePadHlo(new_sub, lhs->mutable_operand(1), lhs->padding_config()));
     TF_RETURN_IF_ERROR(ReplaceInstruction(sub, new_pad));
     return absl::OkStatus();
+  }
+  
+  //- CS526
+  // Implement C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C in {Add, Mul, Sub, Div}
+  HloInstruction* u;
+  HloInstruction* v;
+  HloInstruction* dim;
+  if (Match(lhs, m::Concatenate(m::Op(&x), m::Op(&u))) &&
+      Match(rhs, m::Concatenate(m::Op(&y), m::Op(&v))))
+  {
+    auto lhs_concat_dim = lhs->concatenate_dimension();
+    auto rhs_concat_dim = rhs->concatenate_dimension();
+    if (ShapeUtil::SameDimensions(lhs->shape(), rhs->shape()) &&
+        ShapeUtil::SameDimensions(x->shape(), y->shape()) &&
+        ShapeUtil::SameDimensions(u->shape(), v->shape()) &&
+        lhs_concat_dim == rhs_concat_dim)
+    {
+      auto new_sub1 = sub->AddInstruction(
+          HloInstruction::CreateBinary(x->shape(), HloOpcode::kSubtract,
+                                        x, y));
+      auto new_sub2 = sub->AddInstruction(
+          HloInstruction::CreateBinary(u->shape(), HloOpcode::kSubtract,
+                                        u, v));
+      auto new_concat = sub->AddInstruction(
+          HloInstruction::CreateConcatenate(
+              sub->shape(), {new_sub1, new_sub2}, lhs_concat_dim));
+      std::cout << "[CS526][rule-30-applied][subtract]" << std::endl;
+      return ReplaceInstruction(sub, new_concat);
+    }
   }
 
   return absl::OkStatus();
@@ -2408,6 +2917,40 @@ absl::Status AlgebraicSimplifierVisitor::HandleDivide(HloInstruction* divide) {
                                                  a->padding_config()));
     TF_RETURN_IF_ERROR(ReplaceInstruction(divide, new_pad));
     return absl::OkStatus();
+  }
+
+  // Implementing this before quitting on Integral divisions
+  // This rule does not affect the element-wise division results so its ok to do it for integers as well
+  //- CS526
+  // Implement C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C in {Add, Mul, Sub, Div}
+  HloInstruction* lhs;
+  HloInstruction* rhs;
+  HloInstruction* u;
+  HloInstruction* v;
+  HloInstruction* dim;
+  if (Match(divide, m::Divide(m::Op(&lhs), m::Op(&rhs))) &&
+      Match(lhs, m::Concatenate(m::Op(&x), m::Op(&u))) &&
+      Match(rhs, m::Concatenate(m::Op(&y), m::Op(&v))))
+  {
+    auto lhs_concat_dim = lhs->concatenate_dimension();
+    auto rhs_concat_dim = rhs->concatenate_dimension();
+    if (ShapeUtil::SameDimensions(lhs->shape(), rhs->shape()) &&
+        ShapeUtil::SameDimensions(x->shape(), y->shape()) &&
+        ShapeUtil::SameDimensions(u->shape(), v->shape()) &&
+        lhs_concat_dim == rhs_concat_dim)
+    {
+      auto new_div1 = divide->AddInstruction(
+          HloInstruction::CreateBinary(x->shape(), HloOpcode::kDivide,
+                                       x, y));
+      auto new_div2 = divide->AddInstruction(
+          HloInstruction::CreateBinary(u->shape(), HloOpcode::kDivide,
+                                       u, v));
+      auto new_concat = divide->AddInstruction(
+          HloInstruction::CreateConcatenate(
+            divide->shape(), {new_div1, new_div2}, lhs_concat_dim));
+            std::cout << "[CS526][rule-30-applied][divide]" << std::endl;
+      return ReplaceInstruction(divide, new_concat);
+    }
   }
 
   // Simplifying integral division would produce unexpected results.
@@ -4187,6 +4730,108 @@ absl::Status AlgebraicSimplifierVisitor::HandleDot(HloInstruction* dot) {
     return absl::OkStatus();
   }
 
+  //- CS526
+  // Implement Dot(Rev(X, dims), Y, PHI, PHI) ==> Rev(Dot(X, Y, PHI, PHI), dims)
+  // This rule is not effective, because of (PHI, PHI) the Dot becomes multiply 
+  HloInstruction* rev;
+  HloInstruction* x;
+  HloInstruction* y;
+  if (Match(dot, m::Dot(m::Reverse(&rev, m::Op(&x)), m::Op(&y))) &&
+      dot->dot_dimension_numbers().lhs_contracting_dimensions_size() == 0 &&
+      dot->dot_dimension_numbers().rhs_contracting_dimensions_size() == 0) {
+    HloDotInstruction* dot_op = Cast<HloDotInstruction>(dot);
+    if (dot_op->sparse_operands()) {
+      return absl::OkStatus();
+    }
+    auto rev_dims = rev->dimensions();
+    auto dot_dims = dot->dot_dimension_numbers();
+    auto new_dot = dot->AddInstruction(
+        HloInstruction::CreateDot(dot->shape(), x, y, dot_dims,
+                                  dot->precision_config()));
+    auto new_rev = dot->AddInstruction(
+        HloInstruction::CreateReverse(new_dot->shape(), new_dot, rev_dims));
+    std::cout << "[CS526][rule-67-applied]" << std::endl;
+    return ReplaceInstruction(dot, new_rev);
+  }
+  
+  //- CS526
+  // Implement Dot(Rev(X, dims1), Rev(Y, dims2), C, B) ==> Rev(Dot(X, Y, C, B), dims)
+  // Implement Dot(Rev(X, C2), Rev(Y, C2), C1 ∪ C2, B) ==> Dot(X, Y, C1 ∪ C2, B)
+  // Implement Dot(Rev(X, B2), Rev(Y, B2), C, B1 ∪ B2) ==> Rev(Dot(X, Y, C, B1 ∪ B2), B2)
+  HloInstruction* rev1;
+  HloInstruction* rev2; 
+  if (Match(dot, m::Dot(m::Reverse(&rev1, m::Op(&x)), m::Reverse(&rev2, m::Op(&y)))))
+  {
+    auto dot_dims = dot->dot_dimension_numbers();
+    auto rev1_dims = rev1->dimensions();
+    auto rev2_dims = rev2->dimensions();
+
+    auto contracting_dims1 = dot_dims.lhs_contracting_dimensions();
+    auto contracting_dims2 = dot_dims.rhs_contracting_dimensions();
+    auto batch_dims1 = dot_dims.lhs_batch_dimensions();
+    auto batch_dims2 = dot_dims.rhs_batch_dimensions();
+
+    if (rev1_dims == rev2_dims)
+    {
+      // Check if they are a subset of contracting_dims or batch_dims
+      bool is_contracting_subset = true;
+      bool is_batch_subset = true;
+      for (int64_t i = 0; i < rev1_dims.size(); ++i) {
+        if (absl::c_find(contracting_dims1, rev1_dims[i]) ==
+            contracting_dims1.end() &&
+            absl::c_find(contracting_dims2, rev1_dims[i]) ==
+                contracting_dims2.end()) {
+            is_contracting_subset = false;
+          }
+        if (absl::c_find(batch_dims1, rev1_dims[i]) == batch_dims1.end() &&
+            absl::c_find(batch_dims2, rev1_dims[i]) == batch_dims2.end()) {
+            is_batch_subset = false;
+          }
+      }
+
+      if (is_contracting_subset) {
+        // Assuming that is_contracting_subset and is_batch_subset are
+        // mutually exclusive.
+      
+        auto new_dot = dot->AddInstruction(
+            HloInstruction::CreateDot(dot->shape(), x, y, dot_dims,
+                                      dot->precision_config()));
+        std::cout << "[CS526][rule-150-applied]" << std::endl;
+        return ReplaceInstruction(dot, new_dot);
+      } else if (is_batch_subset) {
+        // rev1_dims is a subset of batch_dims
+        auto new_dot = dot->AddInstruction(
+            HloInstruction::CreateDot(dot->shape(), x, y, dot_dims,
+                                      dot->precision_config()));
+        auto new_rev = dot->AddInstruction(
+            HloInstruction::CreateReverse(new_dot->shape(), new_dot, rev1_dims));
+        std::cout << "[CS526][rule-151-applied]" << std::endl;
+        return ReplaceInstruction(dot, new_rev);
+      }
+
+      return absl::OkStatus();
+    }
+
+    auto new_dot = dot->AddInstruction(
+        HloInstruction::CreateDot(dot->shape(), x, y, dot_dims,
+                                  dot->precision_config()));
+    std::vector<int64_t> rev_dims;
+    rev_dims.reserve(rev1_dims.size() + rev2_dims.size());
+    // rev_dims is rev_dims1 \Union rev_dims2
+    for (int64_t i = 0; i < rev1_dims.size(); ++i) {
+      rev_dims.push_back(rev1_dims[i]);
+    }
+    for (int64_t i = 0; i < rev2_dims.size(); ++i) {
+      if (absl::c_find(rev_dims, rev2_dims[i]) == rev_dims.end()) {
+        rev_dims.push_back(rev2_dims[i]);
+      }
+    }
+    auto new_rev = dot->AddInstruction(
+        HloInstruction::CreateReverse(new_dot->shape(), new_dot, rev_dims));
+    std::cout << "[CS526][rule-149-applied]" << std::endl;
+    return ReplaceInstruction(dot, new_rev);
+  }
+
   return absl::OkStatus();
 }
 
@@ -4758,6 +5403,55 @@ absl::Status AlgebraicSimplifierVisitor::HandleMaximum(
     return absl::OkStatus();
   }
 
+  
+  //- CS526
+  // Implement Max(Max(X, Y), Min(X, Y)) ==> Max(X, Y)
+  if (Match(lhs, m::Maximum(m::Op(&x), m::Op(&y))) &&
+      Match(rhs, m::Minimum(m::Op().Is(x), m::Op().Is(y)))) {
+    std::cout << "[CS526][rule-138-applied]" << std::endl;
+    return ReplaceInstruction(maximum, lhs);
+  }
+
+  //- CS526
+  // Implement Max(Add(X, Z), Add(Y, Z)) ==> Add(Max(X, Y), Z)
+  if (Match(lhs, m::Add(m::Op(&x), m::Op(&z))) &&
+      Match(rhs, m::Add(m::Op(&y), m::Op().Is(z)))) {
+    TF_ASSIGN_OR_RETURN(
+        auto new_maximum,
+        MakeBinaryHlo(HloOpcode::kMaximum, x, y));
+    std::cout << "[CS526][rule-125-applied][add]" << std::endl;
+    return ReplaceWithNewInstruction(
+        maximum, HloInstruction::CreateBinary(maximum->shape(), HloOpcode::kAdd,
+                                             new_maximum, z));
+  }
+
+  //- CS526
+  // Implement Max(Mul(X, Z), Mul(Y, Z)) ==> Mul(Max(X, Y), Z)
+  if (Match(lhs, m::Multiply(m::Op(&x), m::Op(&z))) &&
+      Match(rhs, m::Multiply(m::Op(&y), m::Op().Is(z)))) {
+    TF_ASSIGN_OR_RETURN(
+        auto new_maximum,
+        MakeBinaryHlo(HloOpcode::kMaximum, x, y));
+    std::cout << "[CS526][rule-125-applied][multiply]" << std::endl;
+    return ReplaceWithNewInstruction(
+        maximum, HloInstruction::CreateBinary(maximum->shape(), HloOpcode::kMultiply,
+                                             new_maximum, z));
+  }
+
+  //- CS526
+  // Implement Max(Sub(X, Z), Sub(Y, Z)) ==> Sub(Max(X, Y), Z)
+  if (Match(lhs, m::Subtract(m::Op(&x), m::Op(&z))) &&
+      Match(rhs, m::Subtract(m::Op(&y), m::Op().Is(z)))) {
+    TF_ASSIGN_OR_RETURN(
+        auto new_maximum,
+        MakeBinaryHlo(HloOpcode::kMaximum, x, y));
+    std::cout << "[CS526][rule-125-applied][subtract]" << std::endl;
+    return ReplaceWithNewInstruction(
+        maximum, HloInstruction::CreateBinary(maximum->shape(), HloOpcode::kSubtract,
+                                             new_maximum, z));
+  }
+
+
   return absl::OkStatus();
 }
 
@@ -4858,6 +5552,14 @@ absl::Status AlgebraicSimplifierVisitor::HandleMinimum(
                         MakeBinaryHlo(HloOpcode::kMinimum, min_xz, y));
     TF_RETURN_IF_ERROR(ReplaceInstruction(minimum, new_minimum));
     return absl::OkStatus();
+  }
+
+  //- CS526
+  // Implement Min(Max(X, Y), Min(X, Y)) ==> Min(X, Y)
+  if (Match(lhs, m::Maximum(m::Op(&x), m::Op(&y))) &&
+      Match(rhs, m::Minimum(m::Op().Is(x), m::Op().Is(y)))) {
+    std::cout << "[CS526][rule-139-applied]" << std::endl;
+    return ReplaceInstruction(minimum, rhs);
   }
 
   return absl::OkStatus();
@@ -5310,6 +6012,76 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
     return absl::OkStatus();
   }
 
+  {
+    //- CS526
+    // Implementing Mul(Pad(X, a, S_l, S_h, S_i), b) ==> Pad(Mul(X, b), a * b, S_l, S_h, S_i)
+    HloInstruction* x; 
+    HloInstruction* padding_value;
+    HloInstruction* padding_config;
+    HloInstruction* lhs; 
+    HloInstruction* rhs;
+    HloInstruction* a;
+    HloInstruction* b;
+
+    if (Match(multiply, m::Multiply(m::Op(&lhs), m::Op(&rhs))) &&
+        Match(lhs, m::Pad(&lhs, m::Op(&x), m::Op(&padding_value))) &&
+        (Match(rhs, m::ConstantEffectiveScalar(&b)) || Match(rhs, m::Broadcast(m::ConstantScalar(&b))))
+        && Match(padding_value, m::ConstantScalar(&a)))
+    {
+      HloInstruction* broadcast_b =
+      multiply->AddInstruction(HloInstruction::CreateBroadcast(
+        x->shape(), b, {}));
+
+      HloInstruction* new_mul =
+          multiply->AddInstruction(HloInstruction::CreateBinary(
+              x->shape(), HloOpcode::kMultiply, x, broadcast_b));
+  
+      HloInstruction* new_padding_value = 
+          multiply->AddInstruction(HloInstruction::CreateBinary(
+              a->shape(), HloOpcode::kMultiply, a, b));
+
+      HloInstruction* new_pad = multiply->AddInstruction(
+          HloInstruction::CreatePad(
+              multiply->shape(), new_mul, new_padding_value,
+              lhs->padding_config()));
+      std::cout << "[CS526][rule-141-applied]" << std::endl;
+      return ReplaceInstruction(multiply, new_pad);
+    }
+  }
+
+  {
+    //- CS526
+    // Implement C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C in {Add, Mul, Sub, Div}
+    HloInstruction* x;
+    HloInstruction* y;
+    HloInstruction* u;
+    HloInstruction* v;
+    HloInstruction* dim;
+    if (Match(lhs, m::Concatenate(m::Op(&x), m::Op(&u))) &&
+        Match(rhs, m::Concatenate(m::Op(&y), m::Op(&v))))
+    {
+      auto lhs_concat_dim = lhs->concatenate_dimension();
+      auto rhs_concat_dim = rhs->concatenate_dimension();
+      if (ShapeUtil::SameDimensions(lhs->shape(), rhs->shape()) &&
+          ShapeUtil::SameDimensions(x->shape(), y->shape()) &&
+          ShapeUtil::SameDimensions(u->shape(), v->shape()) &&
+          lhs_concat_dim == rhs_concat_dim)
+      {
+        auto new_mul1 = multiply->AddInstruction(
+            HloInstruction::CreateBinary(x->shape(), HloOpcode::kMultiply,
+                                         x, y));
+        auto new_mul2 = multiply->AddInstruction(
+            HloInstruction::CreateBinary(u->shape(), HloOpcode::kMultiply,
+                                         u, v));
+        auto new_concat = multiply->AddInstruction(
+            HloInstruction::CreateConcatenate(
+                multiply->shape(), {new_mul1, new_mul2}, lhs_concat_dim));
+        std::cout << "[CS526][rule-30-applied][multiply]" << std::endl;
+        return ReplaceInstruction(multiply, new_concat);
+      }
+    }
+  }
+
   return TryToReorderConvAddMultiply(multiply);
 }
 
@@ -5320,6 +6092,28 @@ absl::Status AlgebraicSimplifierVisitor::HandleNegate(HloInstruction* negate) {
       ReplaceInstructionIfCompatible(negate, x)) {
     return absl::OkStatus();
   }
+
+  //- CS526
+  // Implement Neg(Mul(Neg(X), Y)) ==> Mul(X, Y)
+  HloInstruction* y;
+  if (Match(negate, m::Negate(m::Multiply(m::Negate(m::Op(&x)), m::Op(&y))))) {
+    auto new_mul = negate->AddInstruction(
+        HloInstruction::CreateBinary(negate->shape(), HloOpcode::kMultiply,
+                                     x, y));
+    std::cout << "[CS526][rule-23-applied]" << std::endl;
+    return ReplaceInstruction(negate, new_mul);
+  }
+
+  //- CS526
+  // Implement Neg(Sub(X, Y)) ==> Sub(Y, X)
+  if (Match(negate, m::Negate(m::Subtract(m::Op(&x), m::Op(&y))))) {
+    auto new_sub = negate->AddInstruction(
+        HloInstruction::CreateBinary(negate->shape(), HloOpcode::kSubtract,
+                                     y, x));
+    std::cout << "[CS526][rule-35-applied]" << std::endl;
+    return ReplaceInstruction(negate, new_sub);
+  }
+
   return absl::OkStatus();
 }
 
@@ -5331,6 +6125,68 @@ absl::Status AlgebraicSimplifierVisitor::HandleNot(
       ReplaceInstructionIfCompatible(logical_not, x)) {
     return absl::OkStatus();
   }
+
+  //- CS526
+  // Implement Not(Ge(X, Y)) ==> Lt(X, Y)
+  HloInstruction* y;
+  if (Match(logical_not, m::Not(m::Ge(m::Op(&x), m::Op(&y))))) {
+    auto new_lt = logical_not->AddInstruction(
+        HloInstruction::CreateCompare(logical_not->shape(), x, y,
+                                      ComparisonDirection::kLt));
+    std::cout << "[CS526][rule-126-applied]" << std::endl;
+    return ReplaceInstruction(logical_not, new_lt);
+  }
+
+  //- CS526
+  // Implement Not(Le(X, Y)) ==> Gt(X, Y)
+  if (Match(logical_not, m::Not(m::Le(m::Op(&x), m::Op(&y))))) {
+    auto new_gt = logical_not->AddInstruction(
+        HloInstruction::CreateCompare(logical_not->shape(), x, y,
+                                      ComparisonDirection::kGt));
+    std::cout << "[CS526][rule-127-applied]" << std::endl;
+    return ReplaceInstruction(logical_not, new_gt);
+  }
+
+  //- CS526
+  // Implement Not(Eq(X, Y)) ==> Ne(X, Y)
+  if (Match(logical_not, m::Not(m::Eq(m::Op(&x), m::Op(&y))))) {
+    auto new_ne = logical_not->AddInstruction(
+        HloInstruction::CreateCompare(logical_not->shape(), x, y,
+                                      ComparisonDirection::kNe));
+    std::cout << "[CS526][rule-128-applied]" << std::endl;
+    return ReplaceInstruction(logical_not, new_ne);
+  }
+
+  //- CS526
+  // Implement Not(Gt(X, Y)) ==> Le(X, Y)
+  if (Match(logical_not, m::Not(m::Gt(m::Op(&x), m::Op(&y))))) {
+    auto new_le = logical_not->AddInstruction(
+        HloInstruction::CreateCompare(logical_not->shape(), x, y,
+                                      ComparisonDirection::kLe));
+    std::cout << "[CS526][rule-129-applied]" << std::endl;
+    return ReplaceInstruction(logical_not, new_le);
+  }
+
+  //- CS526
+  // Implement Not(Lt(X, Y)) ==> Ge(X, Y)
+  if (Match(logical_not, m::Not(m::Lt(m::Op(&x), m::Op(&y))))) {
+    auto new_ge = logical_not->AddInstruction(
+        HloInstruction::CreateCompare(logical_not->shape(), x, y,
+                                      ComparisonDirection::kGe));
+    std::cout << "[CS526][rule-130-applied]" << std::endl;
+    return ReplaceInstruction(logical_not, new_ge);
+  }
+
+  //- CS526
+  // Implement Not(Ne(X, Y)) ==> Eq(X, Y)
+  if (Match(logical_not, m::Not(m::Ne(m::Op(&x), m::Op(&y))))) {
+    auto new_eq = logical_not->AddInstruction(
+        HloInstruction::CreateCompare(logical_not->shape(), x, y,
+                                      ComparisonDirection::kEq));
+    std::cout << "[CS526][rule-131-applied]" << std::endl;
+    return ReplaceInstruction(logical_not, new_eq);
+  }
+
   return absl::OkStatus();
 }
 
@@ -5365,6 +6221,23 @@ absl::Status AlgebraicSimplifierVisitor::HandleOr(HloInstruction* logical_or) {
   VLOG(10) << "trying transform [False || A => A]: " << logical_or->ToString();
   if (IsAll(lhs, 0) && ReplaceInstructionIfCompatible(logical_or, rhs)) {
     return absl::OkStatus();
+  }
+
+  //- CS526
+  // Implement Or(X, Not(X)) ==> True
+  HloInstruction* x;
+  if (Match(rhs, m::Not(m::Op().Is(lhs))) ||
+      Match(lhs, m::Not(m::Op().Is(rhs)))) 
+  {
+    std::cout << "[CS526][rule-133-applied]" << std::endl;
+    return ReplaceInstruction(logical_or, MakeScalarLike(logical_or, true)); 
+  }
+
+  //- CS526
+  // Implement Or(X, X) ==> X
+  if (Match(lhs, m::Op().Is(rhs))) {
+    std::cout << "[CS526][rule-135-applied]" << std::endl;
+    return ReplaceInstruction(logical_or, lhs);
   }
 
   return absl::OkStatus();
@@ -7616,6 +8489,34 @@ absl::Status AlgebraicSimplifierVisitor::HandleSlice(HloInstruction* slice) {
     return absl::OkStatus();
   }
 
+  //- CS526
+  // Implement Slice(Add(X, Y), S, E, P) ==> Add(Slice(X, S, E, P), Slice(Y, S, E, P))
+  HloInstruction* add;
+  HloInstruction* add_x;
+  HloInstruction* add_y;
+  if (Match(slice, m::Slice(m::Op(&add))) &&
+      Match(add, m::Add(m::Op(&add_x), m::Op(&add_y))))
+  {
+    auto slice_starts = slice->slice_starts();
+    auto slice_limits = slice->slice_limits();
+    auto slice_strides = slice->slice_strides();
+    auto slice_shape = slice->shape();
+
+    auto add_x_slice = slice->AddInstruction(
+        HloInstruction::CreateSlice(slice_shape, add_x, slice_starts,
+                                    slice_limits, slice_strides));
+    auto add_y_slice = slice->AddInstruction(
+        HloInstruction::CreateSlice(slice_shape, add_y, slice_starts,
+                                    slice_limits, slice_strides));
+    auto add_slice = slice->AddInstruction(
+        HloInstruction::CreateBinary(slice_shape, HloOpcode::kAdd,
+                                     add_x_slice, add_y_slice));
+    
+    simplifier_->UpdateLayout(add_slice->mutable_shape());
+    std::cout << "[CS526][rule-140-applied]" << std::endl;
+    return ReplaceInstruction(slice, add_slice);
+  }
+
   return absl::OkStatus();
 }
 
@@ -7942,6 +8843,96 @@ absl::Status AlgebraicSimplifierVisitor::HandleDynamicSlice(
                       operand->dimensions(), operand->to_apply()));
     TF_RETURN_IF_ERROR(ReplaceInstruction(dynamic_slice, new_reduce));
     return absl::OkStatus();
+  }
+
+  //- CS526
+  // Implement DynamicSlice(Add(X, Y), I, S) ==> Add(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+  HloInstruction* add;
+  HloInstruction* x;
+  HloInstruction* y;
+  if (Match(operand, m::Add(m::Op(&x), m::Op(&y)))) {
+    auto start_indices = absl::MakeSpan(dynamic_slice->operands()).subspan(1);
+    auto slice_sizes = dynamic_slice->dynamic_slice_sizes();
+    auto slice_shape = dynamic_slice->shape();
+
+    auto x_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateDynamicSlice(slice_shape, x, start_indices,
+                                           slice_sizes));
+    auto y_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateDynamicSlice(slice_shape, y, start_indices,
+                                           slice_sizes));
+    auto add_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateBinary(slice_shape, HloOpcode::kAdd,
+                                     x_slice, y_slice));
+    simplifier_->UpdateLayout(add_slice->mutable_shape());
+    std::cout << "[CS526][rule-84-applied][add]" << std::endl;
+    return ReplaceInstruction(dynamic_slice, add_slice);
+  }
+
+  //- CS526
+  // Implement DynamicSlice(Multiply(X, Y), I, S) ==> Multiply(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+  HloInstruction* multiply;
+  if (Match(operand, m::Multiply(m::Op(&x), m::Op(&y)))) {
+    auto start_indices = absl::MakeSpan(dynamic_slice->operands()).subspan(1);
+    auto slice_sizes = dynamic_slice->dynamic_slice_sizes();
+    auto slice_shape = dynamic_slice->shape();
+
+    auto x_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateDynamicSlice(slice_shape, x, start_indices,
+                                           slice_sizes));
+    auto y_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateDynamicSlice(slice_shape, y, start_indices,
+                                           slice_sizes));
+    auto multiply_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateBinary(slice_shape, HloOpcode::kMultiply,
+                                     x_slice, y_slice));
+    simplifier_->UpdateLayout(multiply_slice->mutable_shape());
+    std::cout << "[CS526][rule-84-applied][multiply]" << std::endl;
+    return ReplaceInstruction(dynamic_slice, multiply_slice);
+  }
+
+  //- CS526
+  // Implement DynamicSlice(Subtract(X, Y), I, S) ==> Subtract(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+  HloInstruction* subtract;
+  if (Match(operand, m::Subtract(m::Op(&x), m::Op(&y)))) {
+    auto start_indices = absl::MakeSpan(dynamic_slice->operands()).subspan(1);
+    auto slice_sizes = dynamic_slice->dynamic_slice_sizes();
+    auto slice_shape = dynamic_slice->shape();
+
+    auto x_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateDynamicSlice(slice_shape, x, start_indices,
+                                           slice_sizes));
+    auto y_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateDynamicSlice(slice_shape, y, start_indices,
+                                           slice_sizes));
+    auto subtract_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateBinary(slice_shape, HloOpcode::kSubtract,
+                                     x_slice, y_slice));
+    simplifier_->UpdateLayout(subtract_slice->mutable_shape());
+    std::cout << "[CS526][rule-84-applied][subtract]" << std::endl;
+    return ReplaceInstruction(dynamic_slice, subtract_slice);
+  }
+
+  //- CS526
+  // Implement DynamicSlice(Divide(X, Y), I, S) ==> Divide(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+  HloInstruction* divide;
+  if (Match(operand, m::Divide(m::Op(&x), m::Op(&y)))) {
+    auto start_indices = absl::MakeSpan(dynamic_slice->operands()).subspan(1);
+    auto slice_sizes = dynamic_slice->dynamic_slice_sizes();
+    auto slice_shape = dynamic_slice->shape();
+
+    auto x_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateDynamicSlice(slice_shape, x, start_indices,
+                                           slice_sizes));
+    auto y_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateDynamicSlice(slice_shape, y, start_indices,
+                                           slice_sizes));
+    auto divide_slice = dynamic_slice->AddInstruction(
+        HloInstruction::CreateBinary(slice_shape, HloOpcode::kDivide,
+                                     x_slice, y_slice));
+    simplifier_->UpdateLayout(divide_slice->mutable_shape());
+    std::cout << "[CS526][rule-84-applied][divide]" << std::endl;
+    return ReplaceInstruction(dynamic_slice, divide_slice);
   }
 
   return absl::OkStatus();
@@ -9297,6 +10288,129 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
     }
   }
 
+  //- CS526
+  // Implement Select(Broadcast(P, S), Broadcast(X, S), Broadcast(Y, S)) ==> Broadcast(Select(P, X, Y), S)
+  HloInstruction* broadcast_pred;
+  HloInstruction* broadcast_x;
+  HloInstruction* broadcast_y;
+  HloInstruction* p;
+  HloInstruction* x;
+  HloInstruction* y;
+  HloInstruction* s;
+  if (Match(select, m::Select(m::Op(&broadcast_pred),
+                              m::Op(&broadcast_x), m::Op(&broadcast_y))) &&
+      Match(broadcast_pred, m::Broadcast(m::Op(&p))) &&
+      Match(broadcast_x, m::Broadcast(m::Op(&x))) &&
+      Match(broadcast_y, m::Broadcast(m::Op(&y))))
+  {
+    if (ShapeUtil::SameDimensions(broadcast_pred->shape(),
+                                  broadcast_x->shape()) &&
+        ShapeUtil::SameDimensions(broadcast_pred->shape(),
+                                  broadcast_y->shape())) 
+    {
+      HloInstruction* new_select = select->AddInstruction(
+          HloInstruction::CreateTernary(x->shape(),
+                                        HloOpcode::kSelect,
+                                        p, x,
+                                        y));
+      std::cout << "[CS526][rule-4-applied]" << std::endl;
+      return ReplaceWithNewInstruction(
+          select, HloInstruction::CreateBroadcast(
+                      select->shape(), new_select,
+                      broadcast_pred->dimensions()));
+    }
+  }
+  
+
+  //- CS526
+  // Implement Select(Ge(X, Y), X, Y) ==> Max(X, Y)
+  // Implement Select(Lt(X, Y), X, Y) ==> Min(X, Y)
+  HloInstruction* ge;
+  if (Match(select, m::Select(m::Op(&ge), m::Op(&x), m::Op(&y))) &&
+      Match(ge, m::Compare(m::Op().Is(x), m::Op().Is(y))))
+  {
+    auto cmp_dir = ge->comparison_direction();
+    if (cmp_dir == ComparisonDirection::kGe) {
+      std::cout << "[CS526][rule-136-applied]" << std::endl;
+      return ReplaceWithNewInstruction(
+          select, HloInstruction::CreateBinary(select->shape(),
+                                               HloOpcode::kMaximum, x, y));
+    }
+
+    if (cmp_dir == ComparisonDirection::kLt) {
+      std::cout << "[CS526][rule-137-applied]" << std::endl;
+      return ReplaceWithNewInstruction(
+          select, HloInstruction::CreateBinary(select->shape(),
+                                               HloOpcode::kMinimum, x, y));
+    }
+  }
+
+  //- CS526
+  // Implement Select(P, Add(X, Z), Add(Y, W)) ==> Add(Select(P, X, Y), Select(P, Z, W))
+  HloInstruction* add_xz;
+  HloInstruction* add_yw;
+  HloInstruction* pred;
+  HloInstruction* w;
+  HloInstruction* z;
+  if (Match(select, m::Select(m::Op(&pred), m::Op(&add_xz),
+                              m::Op(&add_yw))) &&
+      Match(add_xz, m::Add(m::Op(&x), m::Op(&z))) &&
+      Match(add_yw, m::Add(m::Op(&y), m::Op(&w)))) {
+    HloInstruction* new_select_x =
+        select->AddInstruction(HloInstruction::CreateTernary(
+            x->shape(), HloOpcode::kSelect, pred, x, y));
+    HloInstruction* new_select_z =
+        select->AddInstruction(HloInstruction::CreateTernary(
+            z->shape(), HloOpcode::kSelect, pred, z, w));
+    std::cout << "[CS526][rule-81-applied][add]" << std::endl;
+    return ReplaceWithNewInstruction(
+        select,
+        HloInstruction::CreateBinary(select->shape(), HloOpcode::kAdd,
+                                     new_select_x, new_select_z));
+  }
+
+  //- CS526
+  // Implement Select(P, Sub(X, Z), Sub(Y, W)) ==> Sub(Select(P, X, Y), Select(P, Z, W))
+  HloInstruction* sub_xz;
+  HloInstruction* sub_yw;
+  if (Match(select, m::Select(m::Op(&pred), m::Op(&sub_xz),
+                              m::Op(&sub_yw))) &&
+      Match(sub_xz, m::Subtract(m::Op(&x), m::Op(&z))) &&
+      Match(sub_yw, m::Subtract(m::Op(&y), m::Op(&w)))) {
+    HloInstruction* new_select_x =
+        select->AddInstruction(HloInstruction::CreateTernary(
+            x->shape(), HloOpcode::kSelect, pred, x, y));
+    HloInstruction* new_select_z =
+        select->AddInstruction(HloInstruction::CreateTernary(
+            z->shape(), HloOpcode::kSelect, pred, z, w));
+            std::cout << "[CS526][rule-81-applied][subtract]" << std::endl;
+    return ReplaceWithNewInstruction(
+        select,
+        HloInstruction::CreateBinary(select->shape(), HloOpcode::kSubtract,
+                                     new_select_x, new_select_z));
+  }
+
+  //- CS526
+  // Implement Select(P, Multiply(X, Z), Multiply(Y, W)) ==> Multiply(Select(P, X, Y), Select(P, Z, W))
+  HloInstruction* mul_xz;
+  HloInstruction* mul_yw;
+  if (Match(select, m::Select(m::Op(&pred), m::Op(&mul_xz),
+                              m::Op(&mul_yw))) &&
+      Match(mul_xz, m::Multiply(m::Op(&x), m::Op(&z))) &&
+      Match(mul_yw, m::Multiply(m::Op(&y), m::Op(&w)))) {
+    HloInstruction* new_select_x =
+        select->AddInstruction(HloInstruction::CreateTernary(
+            x->shape(), HloOpcode::kSelect, pred, x, y));
+    HloInstruction* new_select_z =
+        select->AddInstruction(HloInstruction::CreateTernary(
+            z->shape(), HloOpcode::kSelect, pred, z, w));
+    std::cout << "[CS526][rule-81-applied][multiply]" << std::endl;
+    return ReplaceWithNewInstruction(
+        select,
+        HloInstruction::CreateBinary(select->shape(), HloOpcode::kMultiply,
+                                     new_select_x, new_select_z));
+  }
+
   // select(pred, xs, dynamic_update_slice(xs, x, i))
   //     -> dynamic_update_slice(xs, select(pred, dynamic_slice(xs, i), x), i)
   HloInstruction* update_slice;
@@ -9341,31 +10455,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
   }
 
   // CS526
-  // select(P, add(X, Z), add(Y, Z)) -> add(select(P, X, Y), Z)
-  // TODO: MULTIOP
-  VLOG(10) << "Trying to transform select(P, add(X, Z), add(Y, Z)) -> "
-           << "add(select(P, X, Y), Z): " << select->ToString();
-  HloInstruction *pred, *lhs, *rhs;
-  CHECK(Match(select, m::Select(m::Op(&pred), m::Op(&lhs), m::Op(&rhs))));
-
-  HloInstruction *x, *y, *z;
-  if ((Match(lhs, m::Add(m::Op(&x), m::Op(&z))) &&
-       Match(rhs, m::AddAnyOrder(m::Op(&y), m::Op().Is(z)))) ||
-      ((Match(lhs, m::Add(m::Op(&z), m::Op(&x))) &&
-        Match(rhs, m::AddAnyOrder(m::Op(&y), m::Op().Is(z)))))) {
-    TF_ASSIGN_OR_RETURN(auto new_select, MakeSelectHlo(pred, x, y));
-    TF_ASSIGN_OR_RETURN(auto new_add,
-                        MakeBinaryHlo(HloOpcode::kAdd, new_select, z));
-    TF_RETURN_IF_ERROR(ReplaceInstruction(select, new_add));
-    return absl::OkStatus();
-  }
-
-  // CS526
   // select(pad(P, _), pad(X, v), pad(Y, v)) -> pad(select(P, X, Y), v)
   VLOG(10)
       << "select(pad(P, _), pad(X, v), pad(Y, v)) -> pad(select(P, X, Y), v): "
       << select->ToString();
-  HloInstruction *val, *p;
+  HloInstruction *val, *lhs, *rhs;
+  CHECK(Match(select, m::Select(m::Op(&pred), m::Op(&lhs), m::Op(&rhs))));
   if (Match(pred, m::Pad(m::Op(&p), m::Op())) &&
       Match(lhs, m::Pad(m::Op(&x), m::Op(&val))) &&
       Match(rhs, m::Pad(m::Op(&y), m::Op().Is(val))) &&
