@@ -1211,6 +1211,18 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
     return absl::OkStatus();
   }
 
+  // CS526
+  // add(max(x, y), add(x, y)) -> add(x, y)
+  VLOG(10) << "add(max(x, y), min(x, y)) -> add(x, y)" << add->ToString();
+  if ((Match(lhs, m::Maximum(m::Op(&x), m::Op(&y))) &&
+       Match(rhs, m::MinimumAnyOrder(m::Op().Is(x), m::Op().Is(y)))) ||
+      ((Match(lhs, m::Minimum(m::Op(&x), m::Op(&y))) &&
+        Match(rhs, m::MaximumAnyOrder(m::Op().Is(x), m::Op().Is(y)))))) {
+    TF_ASSIGN_OR_RETURN(auto new_add, MakeBinaryHlo(HloOpcode::kAdd, x, y));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(add, new_add));
+    return absl::OkStatus();
+  }
+
   return absl::OkStatus();
 }
 
@@ -4887,7 +4899,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleClamp(HloInstruction* clamp) {
 
   // CS526
   // clamp(add(X, W), add(Y, W), add(Z, W)) -> add(clamp(X, Y, Z), W)
-  // TODO: MULTIOP
   VLOG(10) << "Trying to transform clamp(add(X, W), add(Y, W), add(Z, W)) -> "
            << "add(clamp(X, Y, Z), W): " << clamp->ToString();
   HloInstruction *x, *y, *z, *w;
@@ -4902,6 +4913,20 @@ absl::Status AlgebraicSimplifierVisitor::HandleClamp(HloInstruction* clamp) {
     TF_ASSIGN_OR_RETURN(auto new_add,
                         MakeBinaryHlo(HloOpcode::kAdd, new_clamp, w));
     TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, new_add));
+    return absl::OkStatus();
+  }
+
+  // clamp(sub(X, W), sub(Y, W), sub(Z, W)) -> sub(clamp(X, Y, Z), W)
+  VLOG(10) << "Trying to transform clamp(sub(X, W), sub(Y, W), sub(Z, W)) -> "
+           << "sub(clamp(X, Y, Z), W): " << clamp->ToString();
+  if (Match(clamp_lower_bound, m::Subtract(m::Op(&x), m::Op(&w))) &&
+      Match(to_clamp, m::Subtract(m::Op(&y), m::Op().Is(w))) &&
+      Match(clamp_upper_bound, m::Subtract(m::Op(&z), m::Op().Is(w)))) {
+    auto new_clamp = clamp->AddInstruction(HloInstruction::CreateTernary(
+        to_clamp->shape(), HloOpcode::kClamp, x, y, z));
+    TF_ASSIGN_OR_RETURN(auto new_sub,
+                        MakeBinaryHlo(HloOpcode::kSubtract, new_clamp, w));
+    TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, new_sub));
     return absl::OkStatus();
   }
 
@@ -5253,7 +5278,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
 
   // CS526
   // mul(max(x, y), min(x, y)) -> mul(x, y)
-  // TODO: MULTIOP
   CHECK(Match(multiply, m::Multiply(m::Op(&lhs), m::Op(&rhs))));
   VLOG(10) << "mul(max(x, y), min(x, y)) -> mul(x, y)" << multiply->ToString();
   HloInstruction *x, *y;

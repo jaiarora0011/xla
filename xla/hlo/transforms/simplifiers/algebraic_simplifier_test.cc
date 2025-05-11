@@ -13097,6 +13097,29 @@ TEST_F(AlgebraicSimplifierTest, ClampAddAnyOrderTest) {
                   m::Parameter(3))));
 }
 
+TEST_F(AlgebraicSimplifierTest, ClampSubTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s8[3,4] parameter(0)
+      arg.y = s8[3,4] parameter(1)
+      arg.z = s8[3,4] parameter(2)
+      arg.w = s8[3,4] parameter(3)
+
+      sub.xw = s8[3,4] subtract(arg.x, arg.w)
+      sub.yw = s8[3,4] subtract(arg.y, arg.w)
+      sub.zw = s8[3,4] subtract(arg.z, arg.w)
+      ROOT clamp.res = s8[3,4] clamp(sub.xw, sub.yw, sub.zw)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Subtract(
+                  m::Clamp(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
+                  m::Parameter(3))));
+}
+
 TEST_F(AlgebraicSimplifierTest, MultiplyMaxMinTest) {
   const char* kModuleStr = R"(
     HloModule m
@@ -13114,6 +13137,24 @@ TEST_F(AlgebraicSimplifierTest, MultiplyMaxMinTest) {
   EXPECT_THAT(
       m->entry_computation()->root_instruction(),
       GmockMatch(m::MultiplyAnyOrder(m::Parameter(0), m::Parameter(1))));
+}
+
+TEST_F(AlgebraicSimplifierTest, AddMaxMinTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      arg.x = s8[3,4] parameter(0)
+      arg.y = s8[3,4] parameter(1)
+
+      max.xy = s8[3,4] maximum(arg.x, arg.y)
+      min.xy = s8[3,4] minimum(arg.x, arg.y)
+      ROOT add.res = s8[3,4] add(max.xy, min.xy)
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::AddAnyOrder(m::Parameter(0), m::Parameter(1))));
 }
 
 TEST_F(AlgebraicSimplifierTest, MultiplyMaxMinAnyOrderTest) {
