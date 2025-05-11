@@ -1195,7 +1195,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
     return ReplaceInstruction(add, lhs);
   }
 
-  // CS526
+  //- CS526
   // pad(X, v) + pad(Y, v) -> pad(X + Y, v)
   VLOG(10) << "Trying to transform pad(X) + pad(Y) to pad(X + Y): "
            << add->ToString();
@@ -1208,11 +1208,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
         auto new_pad,
         MakePadHlo(new_add, lhs->mutable_operand(1), lhs->padding_config()));
     TF_RETURN_IF_ERROR(ReplaceInstruction(add, new_pad));
+    std::cout << "[CS526][rule-111-applied][add]" << std::endl;
     return absl::OkStatus();
   }
 
-  // CS526
-  // add(max(x, y), add(x, y)) -> add(x, y)
+  //- CS526
+  // add(max(x, y), min(x, y)) -> add(x, y)
   VLOG(10) << "add(max(x, y), min(x, y)) -> add(x, y)" << add->ToString();
   if ((Match(lhs, m::Maximum(m::Op(&x), m::Op(&y))) &&
        Match(rhs, m::MinimumAnyOrder(m::Op().Is(x), m::Op().Is(y)))) ||
@@ -1220,6 +1221,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
         Match(rhs, m::MaximumAnyOrder(m::Op().Is(x), m::Op().Is(y)))))) {
     TF_ASSIGN_OR_RETURN(auto new_add, MakeBinaryHlo(HloOpcode::kAdd, x, y));
     TF_RETURN_IF_ERROR(ReplaceInstruction(add, new_add));
+    std::cout << "[CS526][rule-83-applied][add]" << std::endl;
     return absl::OkStatus();
   }
 
@@ -2182,7 +2184,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
     return absl::OkStatus();
   }
 
-  // CS526
+  //- CS526
   // concat(iota(), iota(), ...) -> iota()
   VLOG(10) << "Trying to simplify concatenation of iotas"
            << concatenate->ToString();
@@ -2200,6 +2202,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
           return iota->iota_dimension() == first_iota_dim;
         });
     if (all_same_iota_dim && first_iota_dim != concatenate_dimension) {
+      std::cout << "[CS526][rule-71-applied]" << std::endl;
       return ReplaceWithNewInstruction(
           concatenate,
           HloInstruction::CreateIota(concatenate->shape(), first_iota_dim));
@@ -2689,7 +2692,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleSubtract(HloInstruction* sub) {
     return ReplaceInstruction(sub, MakeScalarLike(sub, 0));
   }
 
-  // CS526
+  //- CS526
   // pad(X, v) - pad(Y, v) -> pad(X - Y, v) if v = 0
   VLOG(10) << "Trying to transform pad(X) - pad(Y) to pad(X - Y): "
            << sub->ToString();
@@ -2703,6 +2706,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleSubtract(HloInstruction* sub) {
         auto new_pad,
         MakePadHlo(new_sub, lhs->mutable_operand(1), lhs->padding_config()));
     TF_RETURN_IF_ERROR(ReplaceInstruction(sub, new_pad));
+    std::cout << "[CS526][rule-111-applied][subtract]" << std::endl;
     return absl::OkStatus();
   }
 
@@ -2880,7 +2884,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleDivide(HloInstruction* divide) {
                                              HloOpcode::kMultiply, a, sqrt));
   }
 
-  // CS526
+  //- CS526
   // pad(X, v) / pad(Y, v) -> pad(X / Y, v) if v = 1
   VLOG(10) << "Trying to transform pad(X) / pad(Y) to pad(X / Y): "
            << divide->ToString();
@@ -2893,6 +2897,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleDivide(HloInstruction* divide) {
     TF_ASSIGN_OR_RETURN(auto new_pad, MakePadHlo(new_div, a->mutable_operand(1),
                                                  a->padding_config()));
     TF_RETURN_IF_ERROR(ReplaceInstruction(divide, new_pad));
+    std::cout << "[CS526][rule-118-applied]" << std::endl;
     return absl::OkStatus();
   }
 
@@ -5344,20 +5349,22 @@ absl::Status AlgebraicSimplifierVisitor::HandleMaximum(
                                              new_maximum));
   }
 
-  // CS526
+  //- CS526
   // max(x, 0) -> x if x is non-negative
   VLOG(10) << "Trying to transform max(x, 0) to x: " << maximum->ToString();
 
   if (IsAll(rhs, 0) && IsNonNegative(lhs, options_) &&
       ReplaceInstructionIfCompatible(maximum, lhs)) {
+    std::cout << "[CS526][rule-105-applied]" << std::endl;
     return absl::OkStatus();
   }
   if (IsAll(lhs, 0) && IsNonNegative(rhs, options_) &&
       ReplaceInstructionIfCompatible(maximum, rhs)) {
+    std::cout << "[CS526][rule-105-applied]" << std::endl;
     return absl::OkStatus();
   }
 
-  // CS526
+  //- CS526
   // max(max(x, y), max(z, y)) -> max(max(x, z), y)
   VLOG(10) << "Trying to transform max(max(x, y), max(z, y)) to "
            << "max(max(x, z), y): " << maximum->ToString();
@@ -5370,6 +5377,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleMaximum(
     TF_ASSIGN_OR_RETURN(auto new_maximum,
                         MakeBinaryHlo(HloOpcode::kMaximum, max_xz, y));
     TF_RETURN_IF_ERROR(ReplaceInstruction(maximum, new_maximum));
+    std::cout << "[CS526][rule-109-applied][maximum]" << std::endl;
     return absl::OkStatus();
   }
 
@@ -5485,7 +5493,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleMinimum(
     }
   }
 
-  // CS526
+  //- CS526
   // min(x, 0) -> 0 if x is non-negative
   // Only applies for integral and boolean types for correct NaN-handling.
   VLOG(10) << "Trying to transform min(x, 0) to 0: " << minimum->ToString();
@@ -5494,16 +5502,18 @@ absl::Status AlgebraicSimplifierVisitor::HandleMinimum(
       !primitive_util::IsFloatingPointType(minimum->shape().element_type()) &&
       IsNonNegative(lhs, options_) &&
       ReplaceInstructionIfCompatible(minimum, rhs)) {
+    std::cout << "[CS526][rule-106-applied]" << std::endl;
     return absl::OkStatus();
   }
   if (IsAll(lhs, 0) &&
       !primitive_util::IsFloatingPointType(minimum->shape().element_type()) &&
       IsNonNegative(rhs, options_) &&
       ReplaceInstructionIfCompatible(minimum, lhs)) {
+    std::cout << "[CS526][rule-106-applied]" << std::endl;
     return absl::OkStatus();
   }
 
-  // CS526
+  //- CS526
   // min(min(x, y), min(z, y)) -> min(min(x, z), y)
   VLOG(10) << "Trying to transform min(min(x, y), min(z, y)) to "
            << "min(min(x, z), y): " << minimum->ToString();
@@ -5516,6 +5526,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleMinimum(
     TF_ASSIGN_OR_RETURN(auto new_minimum,
                         MakeBinaryHlo(HloOpcode::kMinimum, min_xz, y));
     TF_RETURN_IF_ERROR(ReplaceInstruction(minimum, new_minimum));
+    std::cout << "[CS526][rule-109-applied][minimum]" << std::endl;
     return absl::OkStatus();
   }
 
@@ -5564,7 +5575,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleClamp(HloInstruction* clamp) {
     }
   }
 
-  // CS526
+  //- CS526
   // clamp(add(X, W), add(Y, W), add(Z, W)) -> add(clamp(X, Y, Z), W)
   VLOG(10) << "Trying to transform clamp(add(X, W), add(Y, W), add(Z, W)) -> "
            << "add(clamp(X, Y, Z), W): " << clamp->ToString();
@@ -5580,9 +5591,11 @@ absl::Status AlgebraicSimplifierVisitor::HandleClamp(HloInstruction* clamp) {
     TF_ASSIGN_OR_RETURN(auto new_add,
                         MakeBinaryHlo(HloOpcode::kAdd, new_clamp, w));
     TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, new_add));
+    std::cout << "[CS526][rule-48-applied][add]" << std::endl;
     return absl::OkStatus();
   }
 
+  //- CS526
   // clamp(sub(X, W), sub(Y, W), sub(Z, W)) -> sub(clamp(X, Y, Z), W)
   VLOG(10) << "Trying to transform clamp(sub(X, W), sub(Y, W), sub(Z, W)) -> "
            << "sub(clamp(X, Y, Z), W): " << clamp->ToString();
@@ -5594,10 +5607,11 @@ absl::Status AlgebraicSimplifierVisitor::HandleClamp(HloInstruction* clamp) {
     TF_ASSIGN_OR_RETURN(auto new_sub,
                         MakeBinaryHlo(HloOpcode::kSubtract, new_clamp, w));
     TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, new_sub));
+    std::cout << "[CS526][rule-48-applied][subtract]" << std::endl;
     return absl::OkStatus();
   }
 
-  // CS526
+  //- CS526
   // clamp(x, x, y) -> min(x, y)
   VLOG(10) << "Trying to transform clamp(x, x, y) -> min(x, y): "
            << clamp->ToString();
@@ -5615,11 +5629,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleClamp(HloInstruction* clamp) {
                           MakeBinaryHlo(HloOpcode::kMinimum, to_clamp,
                                         broadcasted_upper_bound));
       TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, new_min));
+      std::cout << "[CS526][rule-116-applied]" << std::endl;
       return absl::OkStatus();
     }
   }
 
-  // CS526
+  //- CS526
   // clamp(y, x, y) -> y
   // Not implemented for floating point types to avoid NaN issues.
   VLOG(10) << "Trying to transform clamp(y, x, y) -> y: " << clamp->ToString();
@@ -5632,11 +5647,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleClamp(HloInstruction* clamp) {
       auto broadcasted_upper_bound =
           MakeBroadcastHlo(clamp_upper_bound, {}, to_clamp->shape());
       TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, broadcasted_upper_bound));
+      std::cout << "[CS526][rule-120-applied]" << std::endl;
       return absl::OkStatus();
     }
   }
 
-  // CS526
+  //- CS526
   // clamp(minO, clamp(minI, x, maxI), maxO) -> clamp(minO, x, maxO)
   //            where minI <= minO and maxO <= maxI
   // clamp(minO, clamp(minI, x, maxI), maxO) -> clamp(minI, x, maxI)
@@ -5667,6 +5683,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleClamp(HloInstruction* clamp) {
           to_clamp->shape(), HloOpcode::kClamp, clamp_lower_bound, x,
           clamp_upper_bound));
       TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, new_clamp));
+      std::cout << "[CS526][rule-114-applied]" << std::endl;
       return absl::OkStatus();
     }
     TF_ASSIGN_OR_RETURN(bool minI_le_maxI,
@@ -5685,6 +5702,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleClamp(HloInstruction* clamp) {
       auto new_clamp = clamp->AddInstruction(HloInstruction::CreateTernary(
           to_clamp->shape(), HloOpcode::kClamp, minI_bcast, x, maxI_bcast));
       TF_RETURN_IF_ERROR(ReplaceInstruction(clamp, new_clamp));
+      std::cout << "[CS526][rule-115-applied]" << std::endl;
       return absl::OkStatus();
     }
   }
@@ -5943,7 +5961,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
                                      MakeScalarLike(lhs, 1), lhs));
   }
 
-  // CS526
+  //- CS526
   // mul(max(x, y), min(x, y)) -> mul(x, y)
   CHECK(Match(multiply, m::Multiply(m::Op(&lhs), m::Op(&rhs))));
   VLOG(10) << "mul(max(x, y), min(x, y)) -> mul(x, y)" << multiply->ToString();
@@ -5955,10 +5973,11 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
     TF_ASSIGN_OR_RETURN(auto new_mul,
                         MakeBinaryHlo(HloOpcode::kMultiply, x, y));
     TF_RETURN_IF_ERROR(ReplaceInstruction(multiply, new_mul));
+    std::cout << "[CS526][rule-83-applied][multiply]" << std::endl;
     return absl::OkStatus();
   }
 
-  // CS526
+  //- CS526
   // pad(X, v) * pad(Y, v) -> pad(X * Y, v) if v = 1
   VLOG(10) << "Trying to transform pad(X) * pad(Y) to pad(X * Y): "
            << multiply->ToString();
@@ -5974,6 +5993,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
         auto new_pad,
         MakePadHlo(new_mul, lhs->mutable_operand(1), lhs->padding_config()));
     TF_RETURN_IF_ERROR(ReplaceInstruction(multiply, new_pad));
+    std::cout << "[CS526][rule-112-applied]" << std::endl;
     return absl::OkStatus();
   }
 
@@ -6905,7 +6925,7 @@ absl::Status AlgebraicSimplifierVisitor::HandlePad(HloInstruction* pad) {
     }
   }
 
-  // CS526
+  //- CS526
   // pad(pad(x, v, L1, H1, I1), v, L2, H2, I2) ->
   //    pad(x, v, L1 + L2, H1 + H2, I1 + I2) if
   // - I2 = 0
@@ -6954,6 +6974,7 @@ absl::Status AlgebraicSimplifierVisitor::HandlePad(HloInstruction* pad) {
       TF_RETURN_IF_ERROR(LayoutUtil::CopyLayoutBetweenShapes(
           pad->shape(), new_pad->mutable_shape()));
       simplifier_->UpdateLayout(new_pad->mutable_shape());
+      std::cout << "[CS526][rule-146-applied]" << std::endl;
       return ReplaceInstruction(pad, new_pad);
     }
   }
@@ -7714,7 +7735,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleReverse(
     }
   }
 
-  // CS526
+  //- CS526
   // reverse(iota(), dims) -> iota() if iota_dimension is not in dims
   VLOG(10) << "Trying to simplify reverse of iota: " << reverse->ToString();
   HloInstruction* iota;
@@ -7723,11 +7744,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleReverse(
     int64_t iota_dim = iota_inst->iota_dimension();
     if (!absl::c_linear_search(reverse->dimensions(), iota_dim) &&
         ReplaceInstructionIfCompatible(reverse, iota)) {
+      std::cout << "[CS526][rule-124-applied]" << std::endl;
       return absl::OkStatus();
     }
   }
 
-  // CS526
+  //- CS526
   // reverse(pad(x, v, l, h, i), dims) -> pad(reverse(x), v, h, l, i)
   VLOG(10) << "Trying to simplify reverse of pad: " << reverse->ToString();
   HloInstruction *pad, *x;
@@ -7749,6 +7771,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleReverse(
     TF_ASSIGN_OR_RETURN(
         auto new_pad,
         MakePadHlo(new_reverse, pad->mutable_operand(1), padding_config));
+    std::cout << "[CS526][rule-122-applied]" << std::endl;
     return ReplaceInstruction(reverse, new_pad);
   }
 
@@ -8389,7 +8412,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleSlice(HloInstruction* slice) {
     return absl::OkStatus();
   }
 
-  // CS526
+  //- CS526
   // slice(iota(), dims) -> iota()
   VLOG(10) << "Trying to simplify slice of iota: " << slice->ToString();
   HloInstruction* iota;
@@ -8398,12 +8421,13 @@ absl::Status AlgebraicSimplifierVisitor::HandleSlice(HloInstruction* slice) {
     int64_t iota_dim = iota_inst->iota_dimension();
     if (slice->slice_starts(iota_dim) == 0 &&
         slice->slice_strides(iota_dim) == 1) {
+      std::cout << "[CS526][rule-152-applied]" << std::endl;
       return ReplaceWithNewInstruction(
           slice, HloInstruction::CreateIota(slice->shape(), iota_dim));
     }
   }
 
-  // CS526
+  //- CS526
   // slice(reduce(x, dims), s, e, p) ->
   //    reduce(slice(x, s, e, p), dims)
   VLOG(10) << "Trying to simplify slice of reduce: " << slice->ToString();
@@ -8434,6 +8458,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleSlice(HloInstruction* slice) {
         MakeReduceHlo(new_slice, reduce->mutable_operand(1),
                       reduce->dimensions(), reduce->to_apply()));
     TF_RETURN_IF_ERROR(ReplaceInstruction(slice, new_reduce));
+    std::cout << "[CS526][rule-142-applied]" << std::endl;
     return absl::OkStatus();
   }
 
@@ -8756,7 +8781,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleDynamicSlice(
     MarkAsChanged();
   }
 
-  // CS526
+  //- CS526
   // dynamic_slice(reduce(x, dims), i, s) ->
   //    reduce(dynamic_slice(x, i, s), dims)
   VLOG(10) << "Trying to simplify dynamic slice of reduce: "
@@ -8787,6 +8812,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleDynamicSlice(
         MakeReduceHlo(new_dynamic_slice, operand->mutable_operand(1),
                       operand->dimensions(), operand->to_apply()));
     TF_RETURN_IF_ERROR(ReplaceInstruction(dynamic_slice, new_reduce));
+    std::cout << "[CS526][rule-104-applied]" << std::endl;
     return absl::OkStatus();
   }
 
@@ -9757,7 +9783,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleReduce(HloInstruction* hlo) {
     }
   }
 
-  // CS526
+  //- CS526
   // reduce(iota(), *, dims) -> 0 if iota_dim is in dims
   VLOG(10) << "Trying to simplify reduce(iota, *)" << reduce->ToString();
   if (arg->opcode() == HloOpcode::kIota &&
@@ -9771,11 +9797,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleReduce(HloInstruction* hlo) {
     // not 0. This would be covered by existing simplifications.
     if (absl::c_linear_search(reduce->dimensions(), iota_dim) &&
         arg->shape().dimensions(iota_dim) > 0) {
+      std::cout << "[CS526][rule-144-applied]" << std::endl;
       return ReplaceInstruction(reduce, MakeScalarLike(reduce, 0));
     }
   }
 
-  // CS526
+  //- CS526
   // reduce(iota(), +, dims) -> const(...) if iota_dim is in dims
   VLOG(10) << "Trying to simplify reduce(iota, +)" << reduce->ToString();
   if (arg->opcode() == HloOpcode::kIota &&
@@ -9804,6 +9831,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleReduce(HloInstruction* hlo) {
       }
     }
     if (iota_dim_found && all_non_zero) {
+      std::cout << "[CS526][rule-143-applied]" << std::endl;
       return ReplaceInstruction(reduce, MakeScalarLike(reduce, dim_prod));
     }
   }
@@ -10391,7 +10419,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
     return ReplaceWithNewInstruction(select, std::move(new_xs));
   }
 
-  // CS526
+  //- CS526
   // select(pad(P, _), pad(X, v), pad(Y, v)) -> pad(select(P, X, Y), v)
   VLOG(10)
       << "select(pad(P, _), pad(X, v), pad(Y, v)) -> pad(select(P, X, Y), v): "
@@ -10410,6 +10438,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
         auto new_pad,
         MakePadHlo(new_select, lhs->mutable_operand(1), lhs->padding_config()));
     TF_RETURN_IF_ERROR(ReplaceInstruction(select, new_pad));
+    std::cout << "[CS526][rule-119-applied]" << std::endl;
     return absl::OkStatus();
   }
 
