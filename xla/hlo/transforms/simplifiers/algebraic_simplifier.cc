@@ -6060,6 +6060,59 @@ absl::Status AlgebraicSimplifierVisitor::HandlePad(HloInstruction* pad) {
     }
   }
 
+  // CS526
+  // pad(pad(x, v, L1, H1, I1), v, L2, H2, I2) ->
+  //    pad(x, v, L1 + L2, H1 + H2, I1 + I2) if
+  // - I2 = 0
+  // - for any dim, !(L1[dim] < 0 and L2[dim] > 0),
+  // - for any dim, !(H1[dim] < 0 and H2[dim] > 0)
+  // This is implemented before the negative padding replacement for
+  // better optimization opportunities.
+  HloInstruction *inner_pad, *x, *val;
+  if (Match(pad, m::Pad(m::Op(&inner_pad), m::Op(&val))) &&
+      Match(inner_pad, m::Pad(m::Op(&x), m::Op().Is(val)))) {
+    PaddingConfig inner_pad_config = inner_pad->padding_config();
+    PaddingConfig outer_pad_config = pad->padding_config();
+    bool can_combine = true;
+    for (int64_t i = 0; i < pad->shape().dimensions_size(); ++i) {
+      if (outer_pad_config.dimensions(i).interior_padding() != 0) {
+        can_combine = false;
+        break;
+      }
+      if (inner_pad_config.dimensions(i).edge_padding_low() < 0 &&
+          outer_pad_config.dimensions(i).edge_padding_low() > 0) {
+        can_combine = false;
+        break;
+      }
+      if (inner_pad_config.dimensions(i).edge_padding_high() < 0 &&
+          outer_pad_config.dimensions(i).edge_padding_high() > 0) {
+        can_combine = false;
+        break;
+      }
+      PaddingConfig::PaddingConfigDimension* padding_dimension =
+          inner_pad_config.mutable_dimensions(i);
+      // Combine the padding configs
+      padding_dimension->set_edge_padding_low(
+          padding_dimension->edge_padding_low() +
+          outer_pad_config.dimensions(i).edge_padding_low());
+      padding_dimension->set_edge_padding_high(
+          padding_dimension->edge_padding_high() +
+          outer_pad_config.dimensions(i).edge_padding_high());
+    }
+    if (can_combine) {
+      TF_ASSIGN_OR_RETURN(HloInstruction * new_pad,
+                          MakePadHlo(x, val, inner_pad_config));
+      // MakePadHlo assumes that the return type matches the type of the
+      // operand, but that's not required. Use the type from the original pad
+      // instruction.
+      new_pad->mutable_shape()->set_element_type(pad->shape().element_type());
+      TF_RETURN_IF_ERROR(LayoutUtil::CopyLayoutBetweenShapes(
+          pad->shape(), new_pad->mutable_shape()));
+      simplifier_->UpdateLayout(new_pad->mutable_shape());
+      return ReplaceInstruction(pad, new_pad);
+    }
+  }
+
   if (has_negative && options_.enable_negative_padding_replacement()) {
     // Pad has negative padding. Replace with a pad with the non-negative
     // padding followed by a slice which effectively performs the negative

@@ -13846,5 +13846,83 @@ TEST_F(AlgebraicSimplifierTest, NestedClampInnerTest) {
                           m::Broadcast(m::ConstantScalar(3)))));
 }
 
+TEST_F(AlgebraicSimplifierTest, PadCombineTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    ENTRY main {
+      arg.0 = s8[3,4] parameter(0)
+
+      constant.0 = s8[] constant(0)
+      pad.1 = s8[8,10] pad(arg.0, constant.0), padding=4_1x1_5
+      ROOT pad.2 = s8[7,10] pad(pad.1, constant.0), padding=-2_1x1_-1
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Pad(m::Parameter(0), m::ConstantScalar(0))));
+}
+
+TEST_F(AlgebraicSimplifierTest, PadCombineSliceTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    ENTRY main {
+      arg.0 = s8[5,5] parameter(0)
+
+      constant.0 = s8[] constant(0)
+      pad.1 = s8[5,9] pad(arg.0, constant.0), padding=-1_1x1_3
+      ROOT pad.2 = s8[4,9] pad(pad.1, constant.0), padding=-2_1x1_-1
+    }
+)";
+  // Instead of combining the two pads, the simplifier will decompose the
+  // inner pad into a slice and a pad. This disables combining the two
+  // pads
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Slice(m::Pad(
+                  m::Slice(m::Pad(m::Parameter(0), m::ConstantScalar(0))),
+                  m::ConstantScalar(0)))));
+}
+
+TEST_F(AlgebraicSimplifierTest, PadCombineInteriorTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    ENTRY main {
+      arg.0 = s8[6,7,8] parameter(0)
+
+      constant.0 = s8[] constant(0)
+      pad.1 = s8[17,28,17] pad(arg.0, constant.0), padding=1_0_2x2_1_3x1_1_1
+      ROOT pad.2 = s8[19,29,19] pad(pad.1, constant.0), padding=1_1_0x1_0_0x1_1_0
+    }
+)";
+  // Instead of combining the two pads, the simplifier will decompose the
+  // inner pad into a slice and a pad. This disables combining the two
+  // pads
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Pad(m::Parameter(0), m::ConstantScalar(0))));
+}
+
+TEST_F(AlgebraicSimplifierTest, PadCombineNegativeTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    ENTRY main {
+      arg.0 = s8[6,7,8] parameter(0)
+
+      constant.0 = s8[] constant(0)
+      pad.1 = s8[17,28,17] pad(arg.0, constant.0), padding=1_0_2x2_1_3x1_1_1
+      constant.1 = s8[] constant(1)
+      ROOT pad.2 = s8[19,29,19] pad(pad.1, constant.1), padding=1_1_0x1_0_0x1_1_0
+    }
+)";
+  // Instead of combining the two pads, the simplifier will decompose the
+  // inner pad into a slice and a pad. This disables combining the two
+  // pads
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_FALSE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+}
+
 }  // namespace
 }  // namespace xla
