@@ -1267,7 +1267,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
   //- CS526
   // Implement Add(Dot(X, Y, C, PHI), Dot(X, Z, C, PHI)) ==> Dot(X, Add(Y, Z), C, PHI)
   HloInstruction* z;
-  HloInstruction* phi;
   if (Match(lhs, m::Dot(m::Op(&x), m::Op(&y))) &&
       Match(rhs, m::Dot(m::Op().Is(x), m::Op(&z))))
   {
@@ -1329,12 +1328,8 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
   }
   //- CS526
   // Implement Add(Reduce(add, X, dims), Reduce(add, Y, dims)) ==> Reduce(add, Add(X, Y), dims)
-  HloInstruction* x_reduce;
-  HloInstruction* y_reduce;
   HloInstruction* x_init;
   HloInstruction* y_init;
-  HloComputation* dims1;
-  HloComputation* dims2;
   if (Match(lhs, m::Reduce(m::Op(&x), m::Op(&x_init))) &&
       Match(rhs, m::Reduce(m::Op(&y), m::Op(&y_init))))
   {
@@ -1371,7 +1366,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleAdd(HloInstruction* add) {
   // Implement C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C in {Add, Mul, Sub, Div}
   HloInstruction* u;
   HloInstruction* v;
-  HloInstruction* dim;
   if (Match(lhs, m::Concatenate(m::Op(&x), m::Op(&u))) &&
       Match(rhs, m::Concatenate(m::Op(&y), m::Op(&v))))
   {
@@ -1408,6 +1402,7 @@ absl::Status AlgebraicSimplifierVisitor::HandleXor(HloInstruction* xor_op) {
     return ReplaceInstruction(xor_op, MakeScalarLike(xor_op, false));
   }
 
+  return absl::OkStatus();
 }
 
 absl::Status AlgebraicSimplifierVisitor::HandleShiftRightLogical(
@@ -1419,10 +1414,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleShiftRightLogical(
 
   //- CS526
   // Implement Binary(ShiftRightLogical, A, Constant(0, S)) ==> A
-  if (Match(rhs, m::ConstantEffectiveScalar(0))) {
+  if (IsAll(rhs, 0)) {
     std::cout << "[CS526][rule-54-applied]" << std::endl;
     return ReplaceInstruction(shift_right_logical, lhs);
   }
+
+  return absl::OkStatus();
 }
 
 absl::Status AlgebraicSimplifierVisitor::HandleShiftRightArithmetic(
@@ -1434,10 +1431,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleShiftRightArithmetic(
 
   //- CS526
   // Implement Binary(ShiftRightArithmetic, A, Constant(0, S)) ==> A
-  if (Match(rhs, m::ConstantEffectiveScalar(0))) {
+  if (IsAll(rhs, 0)) {
     std::cout << "[CS526][rule-55-applied]" << std::endl;
     return ReplaceInstruction(shift_right_arithmetic, lhs);
   }
+
+  return absl::OkStatus();
 }
 
 absl::Status AlgebraicSimplifierVisitor::HandleShiftLeft(
@@ -1447,10 +1446,12 @@ absl::Status AlgebraicSimplifierVisitor::HandleShiftLeft(
 
   //- CS526
   // Implement Binary(ShiftLeft, A, Constant(0, S)) ==> A
-  if (Match(rhs, m::ConstantEffectiveScalar(0))) {
+  if (IsAll(rhs, 0)) {
     std::cout << "[CS526][rule-56-applied]" << std::endl;
     return ReplaceInstruction(shift_left, lhs);
   }
+
+  return absl::OkStatus();
 }
 
 
@@ -2357,10 +2358,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
   HloInstruction* a;
   HloInstruction* pad_b;
   HloInstruction* b;
-  HloInstruction* low;
-  HloInstruction* high;
-  HloInstruction* interior;
-  
   if (Match(concatenate, m::Concatenate(
           m::Pad(&pad_a, m::Op(&a), m::Op(&v1)),
           m::Pad(&pad_b, m::Op(&b), m::Op(&v2)))))
@@ -2728,7 +2725,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleSubtract(HloInstruction* sub) {
   // Implement C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C in {Add, Mul, Sub, Div}
   HloInstruction* u;
   HloInstruction* v;
-  HloInstruction* dim;
   if (Match(lhs, m::Concatenate(m::Op(&x), m::Op(&u))) &&
       Match(rhs, m::Concatenate(m::Op(&y), m::Op(&v))))
   {
@@ -2927,7 +2923,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleDivide(HloInstruction* divide) {
   HloInstruction* rhs;
   HloInstruction* u;
   HloInstruction* v;
-  HloInstruction* dim;
   if (Match(divide, m::Divide(m::Op(&lhs), m::Op(&rhs))) &&
       Match(lhs, m::Concatenate(m::Op(&x), m::Op(&u))) &&
       Match(rhs, m::Concatenate(m::Op(&y), m::Op(&v))))
@@ -6017,7 +6012,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
     // Implementing Mul(Pad(X, a, S_l, S_h, S_i), b) ==> Pad(Mul(X, b), a * b, S_l, S_h, S_i)
     HloInstruction* x; 
     HloInstruction* padding_value;
-    HloInstruction* padding_config;
     HloInstruction* lhs; 
     HloInstruction* rhs;
     HloInstruction* a;
@@ -6056,7 +6050,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleMultiply(
     HloInstruction* y;
     HloInstruction* u;
     HloInstruction* v;
-    HloInstruction* dim;
     if (Match(lhs, m::Concatenate(m::Op(&x), m::Op(&u))) &&
         Match(rhs, m::Concatenate(m::Op(&y), m::Op(&v))))
     {
@@ -6225,7 +6218,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleOr(HloInstruction* logical_or) {
 
   //- CS526
   // Implement Or(X, Not(X)) ==> True
-  HloInstruction* x;
   if (Match(rhs, m::Not(m::Op().Is(lhs))) ||
       Match(lhs, m::Not(m::Op().Is(rhs)))) 
   {
@@ -8847,7 +8839,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleDynamicSlice(
 
   //- CS526
   // Implement DynamicSlice(Add(X, Y), I, S) ==> Add(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
-  HloInstruction* add;
   HloInstruction* x;
   HloInstruction* y;
   if (Match(operand, m::Add(m::Op(&x), m::Op(&y)))) {
@@ -8871,7 +8862,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleDynamicSlice(
 
   //- CS526
   // Implement DynamicSlice(Multiply(X, Y), I, S) ==> Multiply(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
-  HloInstruction* multiply;
   if (Match(operand, m::Multiply(m::Op(&x), m::Op(&y)))) {
     auto start_indices = absl::MakeSpan(dynamic_slice->operands()).subspan(1);
     auto slice_sizes = dynamic_slice->dynamic_slice_sizes();
@@ -8893,7 +8883,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleDynamicSlice(
 
   //- CS526
   // Implement DynamicSlice(Subtract(X, Y), I, S) ==> Subtract(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
-  HloInstruction* subtract;
   if (Match(operand, m::Subtract(m::Op(&x), m::Op(&y)))) {
     auto start_indices = absl::MakeSpan(dynamic_slice->operands()).subspan(1);
     auto slice_sizes = dynamic_slice->dynamic_slice_sizes();
@@ -8915,7 +8904,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleDynamicSlice(
 
   //- CS526
   // Implement DynamicSlice(Divide(X, Y), I, S) ==> Divide(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
-  HloInstruction* divide;
   if (Match(operand, m::Divide(m::Op(&x), m::Op(&y)))) {
     auto start_indices = absl::MakeSpan(dynamic_slice->operands()).subspan(1);
     auto slice_sizes = dynamic_slice->dynamic_slice_sizes();
@@ -10296,7 +10284,6 @@ absl::Status AlgebraicSimplifierVisitor::HandleSelect(HloInstruction* select) {
   HloInstruction* p;
   HloInstruction* x;
   HloInstruction* y;
-  HloInstruction* s;
   if (Match(select, m::Select(m::Op(&broadcast_pred),
                               m::Op(&broadcast_x), m::Op(&broadcast_y))) &&
       Match(broadcast_pred, m::Broadcast(m::Op(&p))) &&

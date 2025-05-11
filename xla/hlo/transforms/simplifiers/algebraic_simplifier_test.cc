@@ -14202,8 +14202,7 @@ TEST_F(AlgebraicSimplifierTest, Xor)
     HloModule m
     test {
       x = s32[8] parameter(0)
-      xor_x = s32[8] xor(x, x)
-      ROOT out = s32[8] xor(xor_x, x)
+      ROOT xor_x = s32[8] xor(x, x)
     }
   )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
