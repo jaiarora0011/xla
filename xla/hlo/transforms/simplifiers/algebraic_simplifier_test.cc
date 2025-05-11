@@ -13207,6 +13207,26 @@ TEST_F(AlgebraicSimplifierTest, SelectWithBroadcasts) {
                   m::Parameter(0), m::Parameter(1), m::Parameter(2)))));
 }
 
+TEST_F(AlgebraicSimplifierTest, SelectWithBroadcastsFailure) {
+  // Test that Select(Broadcast(P, S), Broadcast(X, S), Broadcast(Y, S)) ==>
+  // Broadcast(Select(P, X, Y), S) where S is the broadcast dimension set.
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      p = pred[] parameter(0)
+      x = f32[8] parameter(1)
+      y = f32[8] parameter(2)
+      b0 = pred[8, 2] broadcast(p), dimensions={}
+      b1 = f32[8, 2] broadcast(x), dimensions={0}
+      b2 = f32[8, 2] broadcast(y), dimensions={0}
+      ROOT out = f32[8, 2] select(b0, b1, b2)
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  AlgebraicSimplifier simplifier(default_options_);
+  ASSERT_FALSE(simplifier.Run(m.get()).value());
+}
+
 TEST_F(AlgebraicSimplifierTest, AddMulConst) {
   // Testing Add(X, Mul(X, Y)) ==> Mul(X, Add(1, Y))
   const char* kModuleStr = R"(
