@@ -3675,10 +3675,8 @@ TEST_F(AlgebraicSimplifierTest, SliceReverse) {
 HloModule module
 
 ENTRY test {
-  param = f32[6,7,32] parameter(0)
-  constant = f32[] constant(0)
-  pad = f32[8,7,32] pad(param, constant), padding=1_1x0_0x0_0
-  rev = f32[8,7,32] reverse(pad), dimensions={0,2}
+  param = f32[8,7,32] parameter(0)
+  rev = f32[8,7,32] reverse(param), dimensions={0,2}
   slice = f32[1,7,32] slice(rev), slice={[2:3:1], [0:7:1], [0:32:1]}
   ROOT tuple = (f32[1,7,32]) tuple(slice)
 })";
@@ -3689,7 +3687,7 @@ ENTRY test {
   ASSERT_TRUE(simplifier.Run(module.get()).value());
   HloComputation* computation = module->entry_computation();
   EXPECT_THAT(computation->root_instruction(),
-              GmockMatch(m::Tuple(m::Reverse(m::Slice(m::Pad())))));
+              GmockMatch(m::Tuple(m::Reverse(m::Slice()))));
   const HloInstruction* slice =
       computation->root_instruction()->operand(0)->operand(0);
   EXPECT_TRUE(
@@ -3713,10 +3711,8 @@ TEST_F(AlgebraicSimplifierTest, SliceReverseNonUnitEvenOddStrides) {
 HloModule module
 
 ENTRY test {
-  param = f32[6,7,32] parameter(0)
-  constant = f32[] constant(0)
-  pad = f32[8,7,32] pad(param, constant), padding=1_1x0_0x0_0
-  rev = f32[8,7,32] reverse(pad), dimensions={0,1,2}
+  param = f32[8,7,32] parameter(0)
+  rev = f32[8,7,32] reverse(param), dimensions={0,1,2}
   slice = f32[1,2,7] slice(rev), slice={[2:3:2], [0:7:4], [0:32:5]}
   ROOT tuple = (f32[1,2,7]) tuple(slice)
 })";
@@ -3727,7 +3723,7 @@ ENTRY test {
   ASSERT_TRUE(simplifier.Run(module.get()).value());
   HloComputation* computation = module->entry_computation();
   EXPECT_THAT(computation->root_instruction(),
-              GmockMatch(m::Tuple(m::Reverse(m::Slice(m::Pad())))));
+              GmockMatch(m::Tuple(m::Reverse(m::Slice()))));
   const HloInstruction* slice =
       computation->root_instruction()->operand(0)->operand(0);
   EXPECT_TRUE(
@@ -13861,6 +13857,12 @@ TEST_F(AlgebraicSimplifierTest, PadCombineTest) {
   ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::Pad(m::Parameter(0), m::ConstantScalar(0))));
+  const HloInstruction* pad = m->entry_computation()->root_instruction();
+  const PaddingConfig& padding_config = pad->padding_config();
+  EXPECT_EQ(padding_config.dimensions(0).edge_padding_low(), 2);
+  EXPECT_EQ(padding_config.dimensions(0).edge_padding_high(), 2);
+  EXPECT_EQ(padding_config.dimensions(1).edge_padding_low(), 2);
+  EXPECT_EQ(padding_config.dimensions(1).edge_padding_high(), 4);
 }
 
 TEST_F(AlgebraicSimplifierTest, PadCombineSliceTest) {
@@ -13896,13 +13898,18 @@ TEST_F(AlgebraicSimplifierTest, PadCombineInteriorTest) {
       ROOT pad.2 = s8[19,29,19] pad(pad.1, constant.0), padding=1_1_0x1_0_0x1_1_0
     }
 )";
-  // Instead of combining the two pads, the simplifier will decompose the
-  // inner pad into a slice and a pad. This disables combining the two
-  // pads
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::Pad(m::Parameter(0), m::ConstantScalar(0))));
+  const HloInstruction* pad = m->entry_computation()->root_instruction();
+  const PaddingConfig& padding_config = pad->padding_config();
+  EXPECT_EQ(padding_config.dimensions(0).edge_padding_low(), 2);
+  EXPECT_EQ(padding_config.dimensions(0).edge_padding_high(), 1);
+  EXPECT_EQ(padding_config.dimensions(1).edge_padding_low(), 3);
+  EXPECT_EQ(padding_config.dimensions(1).edge_padding_high(), 1);
+  EXPECT_EQ(padding_config.dimensions(2).edge_padding_low(), 2);
+  EXPECT_EQ(padding_config.dimensions(2).edge_padding_high(), 2);
 }
 
 TEST_F(AlgebraicSimplifierTest, PadCombineNegativeTest) {
@@ -13917,11 +13924,32 @@ TEST_F(AlgebraicSimplifierTest, PadCombineNegativeTest) {
       ROOT pad.2 = s8[19,29,19] pad(pad.1, constant.1), padding=1_1_0x1_0_0x1_1_0
     }
 )";
-  // Instead of combining the two pads, the simplifier will decompose the
-  // inner pad into a slice and a pad. This disables combining the two
-  // pads
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   ASSERT_FALSE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+}
+
+TEST_F(AlgebraicSimplifierTest, RevPadTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    ENTRY main {
+      arg.0 = s8[3,4] parameter(0)
+
+      zero = s8[] constant(0)
+      pad.1 = s8[6,7] pad(arg.0, zero), padding=1_2x1_2
+      ROOT rev.res = s8[6,7] reverse(pad.1), dimensions={1}
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Pad(m::Reverse(m::Parameter(0)), m::ConstantScalar(0))));
+  const HloInstruction* pad = m->entry_computation()->root_instruction();
+  const PaddingConfig& padding_config = pad->padding_config();
+  EXPECT_EQ(padding_config.dimensions(0).edge_padding_low(), 1);
+  EXPECT_EQ(padding_config.dimensions(0).edge_padding_high(), 2);
+  EXPECT_EQ(padding_config.dimensions(1).edge_padding_low(), 2);
+  EXPECT_EQ(padding_config.dimensions(1).edge_padding_high(), 1);
 }
 
 }  // namespace

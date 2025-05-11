@@ -6100,7 +6100,7 @@ absl::Status AlgebraicSimplifierVisitor::HandlePad(HloInstruction* pad) {
           outer_pad_config.dimensions(i).edge_padding_high());
     }
     if (can_combine) {
-      TF_ASSIGN_OR_RETURN(HloInstruction * new_pad,
+      TF_ASSIGN_OR_RETURN(auto new_pad,
                           MakePadHlo(x, val, inner_pad_config));
       // MakePadHlo assumes that the return type matches the type of the
       // operand, but that's not required. Use the type from the original pad
@@ -6880,6 +6880,31 @@ absl::Status AlgebraicSimplifierVisitor::HandleReverse(
         ReplaceInstructionIfCompatible(reverse, iota)) {
       return absl::OkStatus();
     }
+  }
+
+  // CS526
+  // reverse(pad(x, v, l, h, i), dims) -> pad(reverse(x), v, h, l, i)
+  VLOG(10) << "Trying to simplify reverse of pad: " << reverse->ToString();
+  HloInstruction *pad, *x;
+  if (Match(reverse, m::Reverse(m::Pad(&pad, m::Op(&x), m::Op())))) {
+    TF_ASSIGN_OR_RETURN(auto new_reverse,
+                        MakeReverseHlo(x, reverse->dimensions()));
+    PaddingConfig padding_config = pad->padding_config();
+    for (int64_t i = 0; i < x->shape().dimensions_size(); ++i) {
+      if (absl::c_linear_search(reverse->dimensions(), i)) {
+        // Reverse the low and high padding values.
+        int64_t low = padding_config.dimensions(i).edge_padding_low();
+        PaddingConfig::PaddingConfigDimension* padding_dimension =
+            padding_config.mutable_dimensions(i);
+        padding_dimension->set_edge_padding_low(
+            padding_config.dimensions(i).edge_padding_high());
+        padding_dimension->set_edge_padding_high(low);
+      }
+    }
+    TF_ASSIGN_OR_RETURN(
+        auto new_pad,
+        MakePadHlo(new_reverse, pad->mutable_operand(1), padding_config));
+    return ReplaceInstruction(reverse, new_pad);
   }
 
   return absl::OkStatus();
