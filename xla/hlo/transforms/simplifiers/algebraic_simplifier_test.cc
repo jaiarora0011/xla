@@ -13185,8 +13185,8 @@ TEST_F(AlgebraicSimplifierTest, MinZeroAbsTest) {
 }
 
 TEST_F(AlgebraicSimplifierTest, SelectWithBroadcasts) {
-  // Test that Select(Broadcast(P, S), Broadcast(X, S), Broadcast(Y, S)) ==> Broadcast(Select(P, X, Y), S)
-  // where S is the broadcast dimension set.
+  // Test that Select(Broadcast(P, S), Broadcast(X, S), Broadcast(Y, S)) ==>
+  // Broadcast(Select(P, X, Y), S) where S is the broadcast dimension set.
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -13203,12 +13203,11 @@ TEST_F(AlgebraicSimplifierTest, SelectWithBroadcasts) {
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Broadcast(m::Select(m::Parameter(0), m::Parameter(1),
-                                                m::Parameter(2)))));      
+              GmockMatch(m::Broadcast(m::Select(
+                  m::Parameter(0), m::Parameter(1), m::Parameter(2)))));
 }
 
-TEST_F(AlgebraicSimplifierTest, AddMulConst)
-{
+TEST_F(AlgebraicSimplifierTest, AddMulConst) {
   // Testing Add(X, Mul(X, Y)) ==> Mul(X, Add(1, Y))
   const char* kModuleStr = R"(
     HloModule m
@@ -13225,11 +13224,11 @@ TEST_F(AlgebraicSimplifierTest, AddMulConst)
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::Multiply(m::Parameter(0),
-                                     m::Add(m::Broadcast(m::ConstantScalar(1)), m::Parameter(1)))));
+                                     m::Add(m::Broadcast(m::ConstantScalar(1)),
+                                            m::Parameter(1)))));
 }
 
-TEST_F(AlgebraicSimplifierTest, AddXNegX)
-{
+TEST_F(AlgebraicSimplifierTest, AddXNegX) {
   // Testing Add(X, Neg(X)) ==> 0
   const char* kModuleStr = R"(
     HloModule m
@@ -13495,12 +13494,11 @@ TEST_F(AlgebraicSimplifierTest, ClampXXY) {
 )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
-EXPECT_THAT(m->entry_computation()->root_instruction(),
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::Minimum(m::Parameter(0), m::Parameter(1))));
 }
 
-TEST_F(AlgebraicSimplifierTest, SubDivXYDivZY)
-{
+TEST_F(AlgebraicSimplifierTest, SubDivXYDivZY) {
   // Testing Sub(Div(X, Y), Div(Z, Y)) ==> Div(Sub(X, Z), Y)
   const char* kModuleStr = R"(
     HloModule m
@@ -13516,13 +13514,13 @@ TEST_F(AlgebraicSimplifierTest, SubDivXYDivZY)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Divide(m::Subtract(m::Parameter(0), m::Parameter(2)),
-                                   m::Parameter(1))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Divide(m::Subtract(m::Parameter(0), m::Parameter(2)),
+                           m::Parameter(1))));
 }
 
-TEST_F(AlgebraicSimplifierTest, NotGeLt)
-{
+TEST_F(AlgebraicSimplifierTest, NotGeLt) {
   // Testing Not(Ge(X, Y)) ==> Lt(X, Y)
   const char* kModuleStr = R"(
     HloModule m
@@ -13536,13 +13534,13 @@ TEST_F(AlgebraicSimplifierTest, NotGeLt)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
-              .WithComparisonDirection(ComparisonDirection::kLt)));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
+                     .WithComparisonDirection(ComparisonDirection::kLt)));
 }
 
-TEST_F(AlgebraicSimplifierTest, NotLeGt)
-{
+TEST_F(AlgebraicSimplifierTest, NotLeGt) {
   // Testing Not(Le(X, Y)) ==> Gt(X, Y)
   const char* kModuleStr = R"(
     HloModule m
@@ -13556,13 +13554,13 @@ TEST_F(AlgebraicSimplifierTest, NotLeGt)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
-              .WithComparisonDirection(ComparisonDirection::kGt)));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
+                     .WithComparisonDirection(ComparisonDirection::kGt)));
 }
 
-TEST_F(AlgebraicSimplifierTest, NotEqNe)
-{
+TEST_F(AlgebraicSimplifierTest, NotEqNe) {
   // Testing Not(Eq(X, Y)) ==> Ne(X, Y)
   const char* kModuleStr = R"(
     HloModule m
@@ -13576,13 +13574,13 @@ TEST_F(AlgebraicSimplifierTest, NotEqNe)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
-              .WithComparisonDirection(ComparisonDirection::kNe)));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
+                     .WithComparisonDirection(ComparisonDirection::kNe)));
 }
 
-TEST_F(AlgebraicSimplifierTest, NotGtLe)
-{
+TEST_F(AlgebraicSimplifierTest, NotGtLe) {
   // Testing Not(Gt(X, Y)) ==> Le(X, Y)
   const char* kModuleStr = R"(
     HloModule m
@@ -13596,13 +13594,13 @@ TEST_F(AlgebraicSimplifierTest, NotGtLe)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
-              .WithComparisonDirection(ComparisonDirection::kLe)));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
+                     .WithComparisonDirection(ComparisonDirection::kLe)));
 }
 
-TEST_F(AlgebraicSimplifierTest, NotLtGe)
-{
+TEST_F(AlgebraicSimplifierTest, NotLtGe) {
   // Testing Not(Lt(X, Y)) ==> Ge(X, Y)
   const char* kModuleStr = R"(
     HloModule m
@@ -13616,13 +13614,13 @@ TEST_F(AlgebraicSimplifierTest, NotLtGe)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
-              .WithComparisonDirection(ComparisonDirection::kGe)));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
+                     .WithComparisonDirection(ComparisonDirection::kGe)));
 }
 
-TEST_F(AlgebraicSimplifierTest, NotNeEq)
-{
+TEST_F(AlgebraicSimplifierTest, NotNeEq) {
   // Testing Not(Ne(X, Y)) ==> Eq(X, Y)
   const char* kModuleStr = R"(
     HloModule m
@@ -13636,13 +13634,13 @@ TEST_F(AlgebraicSimplifierTest, NotNeEq)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
-              .WithComparisonDirection(ComparisonDirection::kEq)));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Compare(m::Parameter(0), m::Parameter(1))
+                     .WithComparisonDirection(ComparisonDirection::kEq)));
 }
 
-TEST_F(AlgebraicSimplifierTest, AndXNotX)
-{
+TEST_F(AlgebraicSimplifierTest, AndXNotX) {
   // Testing And(X, Not(X)) ==> False
   const char* kModuleStr = R"(
     HloModule m
@@ -13657,10 +13655,9 @@ TEST_F(AlgebraicSimplifierTest, AndXNotX)
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::Broadcast(m::ConstantScalar(false))));
-} 
+}
 
-TEST_F(AlgebraicSimplifierTest, OrXNotX)
-{
+TEST_F(AlgebraicSimplifierTest, OrXNotX) {
   // Testing Or(X, Not(X)) ==> True
   const char* kModuleStr = R"(
     HloModule m
@@ -13677,8 +13674,7 @@ TEST_F(AlgebraicSimplifierTest, OrXNotX)
               GmockMatch(m::Broadcast(m::ConstantScalar(true))));
 }
 
-TEST_F(AlgebraicSimplifierTest, AndXX)
-{
+TEST_F(AlgebraicSimplifierTest, AndXX) {
   // Testing And(X, X) ==> X
   const char* kModuleStr = R"(
     HloModule m
@@ -13694,8 +13690,7 @@ TEST_F(AlgebraicSimplifierTest, AndXX)
               GmockMatch(m::Parameter(0)));
 }
 
-TEST_F(AlgebraicSimplifierTest, OrXX)
-{
+TEST_F(AlgebraicSimplifierTest, OrXX) {
   // Testing Or(X, X) ==> X
   const char* kModuleStr = R"(
     HloModule m
@@ -13711,8 +13706,7 @@ TEST_F(AlgebraicSimplifierTest, OrXX)
               GmockMatch(m::Parameter(0)));
 }
 
-TEST_F(AlgebraicSimplifierTest, SelectGeXY)
-{
+TEST_F(AlgebraicSimplifierTest, SelectGeXY) {
   // Testing Select(Ge(X, Y), X, Y) ==> Max(X, Y)
   const char* kModuleStr = R"(
     HloModule m
@@ -13730,8 +13724,7 @@ TEST_F(AlgebraicSimplifierTest, SelectGeXY)
               GmockMatch(m::Maximum(m::Parameter(0), m::Parameter(1))));
 }
 
-TEST_F(AlgebraicSimplifierTest, SelectLtXY)
-{
+TEST_F(AlgebraicSimplifierTest, SelectLtXY) {
   // Testing Select(Lt(X, Y), X, Y) ==> Min(X, Y)
   const char* kModuleStr = R"(
     HloModule m
@@ -13778,9 +13771,8 @@ TEST_F(AlgebraicSimplifierTest, ClampYXY) {
 )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
-  EXPECT_THAT(
-      m->entry_computation()->root_instruction(),
-      GmockMatch(m::Parameter(1)));
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Parameter(1)));
 }
 
 TEST_F(AlgebraicSimplifierTest, ClampYXYScalar) {
@@ -13795,9 +13787,8 @@ TEST_F(AlgebraicSimplifierTest, ClampYXYScalar) {
 )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
-  EXPECT_THAT(
-      m->entry_computation()->root_instruction(),
-      GmockMatch(m::Broadcast(m::Parameter(1))));
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Broadcast(m::Parameter(1))));
 }
 
 TEST_F(AlgebraicSimplifierTest, ClampYXYFPNegativeTest) {
@@ -13825,9 +13816,8 @@ TEST_F(AlgebraicSimplifierTest, ConcatIotaTest) {
 )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
-  EXPECT_THAT(
-      m->entry_computation()->root_instruction(),
-      GmockMatch(m::Iota().WithShape(S8, {2, 8, 4})));
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Iota().WithShape(S8, {2, 8, 4})));
 }
 
 TEST_F(AlgebraicSimplifierTest, ConcatIotaF32Test) {
@@ -13843,9 +13833,8 @@ TEST_F(AlgebraicSimplifierTest, ConcatIotaF32Test) {
 )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
-  EXPECT_THAT(
-      m->entry_computation()->root_instruction(),
-      GmockMatch(m::Iota().WithShape(S32, {2, 3, 22})));
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Iota().WithShape(S32, {2, 3, 22})));
 }
 
 TEST_F(AlgebraicSimplifierTest, DynamicSliceReduce) {
@@ -14009,12 +13998,11 @@ TEST_F(AlgebraicSimplifierTest, ReduceMulIotaTest1) {
 )";
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
-EXPECT_THAT(m->entry_computation()->root_instruction(),
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
               GmockMatch(m::Broadcast(m::ConstantScalar(0))));
 }
 
-TEST_F(AlgebraicSimplifierTest, MaxMaxMin)
-{
+TEST_F(AlgebraicSimplifierTest, MaxMaxMin) {
   // Testing Max(Max(X, Y), Min(X, Y)) ==> Max(X, Y)
   const char* kModuleStr = R"(
     HloModule m
@@ -14033,8 +14021,7 @@ TEST_F(AlgebraicSimplifierTest, MaxMaxMin)
               GmockMatch(m::Maximum(m::Parameter(0), m::Parameter(1))));
 }
 
-TEST_F(AlgebraicSimplifierTest, MinMaxMin)
-{
+TEST_F(AlgebraicSimplifierTest, MinMaxMin) {
   // Testing Min(Max(X, Y), Min(X, Y)) ==> Min(X, Y)
   const char* kModuleStr = R"(
     HloModule m
@@ -14053,9 +14040,9 @@ TEST_F(AlgebraicSimplifierTest, MinMaxMin)
               GmockMatch(m::Minimum(m::Parameter(0), m::Parameter(1))));
 }
 
-TEST_F(AlgebraicSimplifierTest, ConcatBroadcast)
-{
-  // Testing Concat(Broadcast(X, S), Broadcast(Y, S), dim) ==> Broadcast(Concat(X, Y, dim), S)
+TEST_F(AlgebraicSimplifierTest, ConcatBroadcast) {
+  // Testing Concat(Broadcast(X, S), Broadcast(Y, S), dim) ==>
+  // Broadcast(Concat(X, Y, dim), S)
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14070,11 +14057,11 @@ TEST_F(AlgebraicSimplifierTest, ConcatBroadcast)
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Broadcast(m::Concatenate(m::Parameter(0), m::Parameter(1))))); 
+              GmockMatch(m::Broadcast(
+                  m::Concatenate(m::Parameter(0), m::Parameter(1)))));
 }
 
-TEST_F(AlgebraicSimplifierTest, NegMulNeg)
-{
+TEST_F(AlgebraicSimplifierTest, NegMulNeg) {
   // Testing Neg(Mul(Neg(X), Y)) ==> Mul(X, Y)
   const char* kModuleStr = R"(
     HloModule m
@@ -14093,8 +14080,7 @@ TEST_F(AlgebraicSimplifierTest, NegMulNeg)
               GmockMatch(m::Multiply(m::Parameter(0), m::Parameter(1))));
 }
 
-TEST_F(AlgebraicSimplifierTest, AddNegNeg)
-{
+TEST_F(AlgebraicSimplifierTest, AddNegNeg) {
   // Testing Add(Neg(X), Neg(Y)) ==> Neg(Add(X, Y))
   const char* kModuleStr = R"(
     HloModule m
@@ -14114,8 +14100,7 @@ TEST_F(AlgebraicSimplifierTest, AddNegNeg)
               GmockMatch(m::Negate(m::Add(m::Parameter(0), m::Parameter(1)))));
 }
 
-TEST_F(AlgebraicSimplifierTest, NegSub)
-{
+TEST_F(AlgebraicSimplifierTest, NegSub) {
   // Testing Neg(Sub(X, Y)) ==> Sub(Y, X)
   const char* kModuleStr = R"(
     HloModule m
@@ -14133,8 +14118,7 @@ TEST_F(AlgebraicSimplifierTest, NegSub)
               GmockMatch(m::Subtract(m::Parameter(1), m::Parameter(0))));
 }
 
-TEST_F(AlgebraicSimplifierTest, MaxAddAdd)
-{
+TEST_F(AlgebraicSimplifierTest, MaxAddAdd) {
   // Testing Max(Add(X, Z), Add(Y, Z)) ==> Add(Max(X, Y), Z)
   const char* kModuleStr = R"(
     HloModule m
@@ -14151,10 +14135,10 @@ TEST_F(AlgebraicSimplifierTest, MaxAddAdd)
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Add(m::Maximum(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
+              GmockMatch(m::Add(m::Maximum(m::Parameter(0), m::Parameter(1)),
+                                m::Parameter(2))));
 }
-TEST_F(AlgebraicSimplifierTest, MaxMulMul)
-{
+TEST_F(AlgebraicSimplifierTest, MaxMulMul) {
   // Testing Max(Mul(X, Z), Mul(Y, Z)) ==> Mul(Max(X, Y), Z)
   const char* kModuleStr = R"(
     HloModule m
@@ -14170,11 +14154,12 @@ TEST_F(AlgebraicSimplifierTest, MaxMulMul)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Multiply(m::Maximum(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Multiply(m::Maximum(m::Parameter(0), m::Parameter(1)),
+                             m::Parameter(2))));
 }
-TEST_F(AlgebraicSimplifierTest, MaxSubSub)
-{
+TEST_F(AlgebraicSimplifierTest, MaxSubSub) {
   // Testing Max(Sub(X, Z), Sub(Y, Z)) ==> Sub(Max(X, Y), Z)
   const char* kModuleStr = R"(
     HloModule m
@@ -14190,13 +14175,13 @@ TEST_F(AlgebraicSimplifierTest, MaxSubSub)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Subtract(m::Maximum(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Subtract(m::Maximum(m::Parameter(0), m::Parameter(1)),
+                             m::Parameter(2))));
 }
 
-
-TEST_F(AlgebraicSimplifierTest, Xor)
-{
+TEST_F(AlgebraicSimplifierTest, Xor) {
   // Testing Binary(Xor, A, A) ==> Constant(0, shape(A))
   const char* kModuleStr = R"(
     HloModule m
@@ -14293,8 +14278,7 @@ TEST_F(AlgebraicSimplifierTest, ReduceAddIotaNegativeTest) {
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   ASSERT_FALSE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
 }
-TEST_F(AlgebraicSimplifierTest, ShiftRightLogical)
-{
+TEST_F(AlgebraicSimplifierTest, ShiftRightLogical) {
   // Testing Binary(ShiftRightLogical, A, Constant(0, S)) ==> A
   const char* kModuleStr = R"(
     HloModule m
@@ -14311,8 +14295,7 @@ TEST_F(AlgebraicSimplifierTest, ShiftRightLogical)
               GmockMatch(m::Parameter(0)));
 }
 
-TEST_F(AlgebraicSimplifierTest, ShiftRightArithmetic)
-{
+TEST_F(AlgebraicSimplifierTest, ShiftRightArithmetic) {
   // Testing Binary(ShiftRightArithmetic, A, Constant(0, S)) ==> A
   const char* kModuleStr = R"(
     HloModule m
@@ -14329,8 +14312,7 @@ TEST_F(AlgebraicSimplifierTest, ShiftRightArithmetic)
               GmockMatch(m::Parameter(0)));
 }
 
-TEST_F(AlgebraicSimplifierTest, ShiftLeft)
-{
+TEST_F(AlgebraicSimplifierTest, ShiftLeft) {
   // Binary(ShiftLeft, A, Constant(0, S)) ==> A
   const char* kModuleStr = R"(
     HloModule m
@@ -14347,9 +14329,9 @@ TEST_F(AlgebraicSimplifierTest, ShiftLeft)
               GmockMatch(m::Parameter(0)));
 }
 
-TEST_F(AlgebraicSimplifierTest, SelectAddAdd)
-{
-  // Testing Select(P, Add(X, Z), Add(Y, W)) ==> Add(Select(P, X, Y), Select(P, Z, W))
+TEST_F(AlgebraicSimplifierTest, SelectAddAdd) {
+  // Testing Select(P, Add(X, Z), Add(Y, W)) ==> Add(Select(P, X, Y), Select(P,
+  // Z, W))
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14366,13 +14348,15 @@ TEST_F(AlgebraicSimplifierTest, SelectAddAdd)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Add(m::Select(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
-                                m::Select(m::Parameter(0), m::Parameter(3), m::Parameter(4)))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Add(
+          m::Select(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
+          m::Select(m::Parameter(0), m::Parameter(3), m::Parameter(4)))));
 }
-TEST_F(AlgebraicSimplifierTest, SelectSubSub)
-{
-  // Testing Select(P, Sub(X, Z), Sub(Y, W)) ==> Sub(Select(P, X, Y), Select(P, Z, W))
+TEST_F(AlgebraicSimplifierTest, SelectSubSub) {
+  // Testing Select(P, Sub(X, Z), Sub(Y, W)) ==> Sub(Select(P, X, Y), Select(P,
+  // Z, W))
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14389,13 +14373,15 @@ TEST_F(AlgebraicSimplifierTest, SelectSubSub)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Subtract(m::Select(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
-                                     m::Select(m::Parameter(0), m::Parameter(3), m::Parameter(4)))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Subtract(
+          m::Select(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
+          m::Select(m::Parameter(0), m::Parameter(3), m::Parameter(4)))));
 }
-TEST_F(AlgebraicSimplifierTest, SelectMulMul)
-{
-  // Testing Select(P, Mul(X, Z), Mul(Y, W)) ==> Mul(Select(P, X, Y), Select(P, Z, W))
+TEST_F(AlgebraicSimplifierTest, SelectMulMul) {
+  // Testing Select(P, Mul(X, Z), Mul(Y, W)) ==> Mul(Select(P, X, Y), Select(P,
+  // Z, W))
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14412,14 +14398,16 @@ TEST_F(AlgebraicSimplifierTest, SelectMulMul)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Multiply(m::Select(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
-                                     m::Select(m::Parameter(0), m::Parameter(3), m::Parameter(4)))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Multiply(
+          m::Select(m::Parameter(0), m::Parameter(1), m::Parameter(2)),
+          m::Select(m::Parameter(0), m::Parameter(3), m::Parameter(4)))));
 }
 
-TEST_F(AlgebraicSimplifierTest, MulPad)
-{
-  // Testing Mul(Pad(X, a, S_l, S_h, S_i), b) ==> Pad(Mul(X, b), a * b, S_l, S_h, S_i)
+TEST_F(AlgebraicSimplifierTest, MulPad) {
+  // Testing Mul(Pad(X, a, S_l, S_h, S_i), b) ==> Pad(Mul(X, b), a * b, S_l,
+  // S_h, S_i)
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14436,13 +14424,14 @@ TEST_F(AlgebraicSimplifierTest, MulPad)
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Pad(m::Multiply(m::Parameter(0), m::Broadcast(m::Constant())),
-                                m::Multiply(m::Constant(), m::Constant()))));
+              GmockMatch(m::Pad(
+                  m::Multiply(m::Parameter(0), m::Broadcast(m::Constant())),
+                  m::Multiply(m::Constant(), m::Constant()))));
 }
 
-TEST_F(AlgebraicSimplifierTest, AddDot)
-{
-  // Testing Add(Dot(X, Y, C, PHI), Dot(X, Z, C, PHI)) ==> Dot(X, Add(Y, Z), C, PHI)
+TEST_F(AlgebraicSimplifierTest, AddDot) {
+  // Testing Add(Dot(X, Y, C, PHI), Dot(X, Z, C, PHI)) ==> Dot(X, Add(Y, Z), C,
+  // PHI)
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14459,12 +14448,13 @@ TEST_F(AlgebraicSimplifierTest, AddDot)
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Dot(m::Parameter(0), m::Add(m::Parameter(1), m::Parameter(2)))));
+              GmockMatch(m::Dot(m::Parameter(0),
+                                m::Add(m::Parameter(1), m::Parameter(2)))));
 }
 
-TEST_F(AlgebraicSimplifierTest, AddReduce)
-{
-  // Testing Add(Reduce(add, X, dims), Reduce(add, Y, dims)) ==> Reduce(add, Add(X, Y), dims)
+TEST_F(AlgebraicSimplifierTest, AddReduce) {
+  // Testing Add(Reduce(add, X, dims), Reduce(add, Y, dims)) ==> Reduce(add,
+  // Add(X, Y), dims)
   const char* kModuleStr = R"(
     HloModule m
     sum_red {
@@ -14487,7 +14477,8 @@ TEST_F(AlgebraicSimplifierTest, AddReduce)
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Reduce(m::Add(m::Parameter(0), m::Parameter(1)), m::Constant())));
+              GmockMatch(m::Reduce(m::Add(m::Parameter(0), m::Parameter(1)),
+                                   m::Constant())));
 }
 
 TEST_F(AlgebraicSimplifierTest, NestedClampOuterTest) {
@@ -14656,9 +14647,9 @@ TEST_F(AlgebraicSimplifierTest, RevPadTest) {
   EXPECT_EQ(padding_config.dimensions(1).edge_padding_high(), 1);
 }
 
-TEST_F(AlgebraicSimplifierTest, SliceAdd)
-{
-  // Testing Slice(Add(X, Y), S, E, P) ==> Add(Slice(X, S, E, P), Slice(Y, S, E, P))
+TEST_F(AlgebraicSimplifierTest, SliceAdd) {
+  // Testing Slice(Add(X, Y), S, E, P) ==> Add(Slice(X, S, E, P), Slice(Y, S, E,
+  // P))
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14672,13 +14663,14 @@ TEST_F(AlgebraicSimplifierTest, SliceAdd)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Add(m::Slice(m::Parameter(0)), m::Slice(m::Parameter(1)))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Add(m::Slice(m::Parameter(0)), m::Slice(m::Parameter(1)))));
 }
 
-TEST_F(AlgebraicSimplifierTest, DynamicSliceAdd)
-{
-  // Testing DynamicSlice(Add(X, Y), I, S) ==> Add(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+TEST_F(AlgebraicSimplifierTest, DynamicSliceAdd) {
+  // Testing DynamicSlice(Add(X, Y), I, S) ==> Add(DynamicSlice(X, I, S),
+  // DynamicSlice(Y, I, S))
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14694,13 +14686,15 @@ TEST_F(AlgebraicSimplifierTest, DynamicSliceAdd)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Add(m::DynamicSlice(m::Parameter(0), m::Parameter(2), m::Parameter(3)),
-                                m::DynamicSlice(m::Parameter(1), m::Parameter(2), m::Parameter(3)))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Add(
+          m::DynamicSlice(m::Parameter(0), m::Parameter(2), m::Parameter(3)),
+          m::DynamicSlice(m::Parameter(1), m::Parameter(2), m::Parameter(3)))));
 }
-TEST_F(AlgebraicSimplifierTest, DynamicSliceMul)
-{
-  // Testing DynamicSlice(Mul(X, Y), I, S) ==> Mul(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+TEST_F(AlgebraicSimplifierTest, DynamicSliceMul) {
+  // Testing DynamicSlice(Mul(X, Y), I, S) ==> Mul(DynamicSlice(X, I, S),
+  // DynamicSlice(Y, I, S))
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14716,13 +14710,15 @@ TEST_F(AlgebraicSimplifierTest, DynamicSliceMul)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Multiply(m::DynamicSlice(m::Parameter(0), m::Parameter(2), m::Parameter(3)),
-                                     m::DynamicSlice(m::Parameter(1), m::Parameter(2), m::Parameter(3)))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Multiply(
+          m::DynamicSlice(m::Parameter(0), m::Parameter(2), m::Parameter(3)),
+          m::DynamicSlice(m::Parameter(1), m::Parameter(2), m::Parameter(3)))));
 }
-TEST_F(AlgebraicSimplifierTest, DynamicSliceSub)
-{
-  // Testing DynamicSlice(Sub(X, Y), I, S) ==> Sub(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+TEST_F(AlgebraicSimplifierTest, DynamicSliceSub) {
+  // Testing DynamicSlice(Sub(X, Y), I, S) ==> Sub(DynamicSlice(X, I, S),
+  // DynamicSlice(Y, I, S))
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14738,13 +14734,15 @@ TEST_F(AlgebraicSimplifierTest, DynamicSliceSub)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Subtract(m::DynamicSlice(m::Parameter(0), m::Parameter(2), m::Parameter(3)),
-                                     m::DynamicSlice(m::Parameter(1), m::Parameter(2), m::Parameter(3)))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Subtract(
+          m::DynamicSlice(m::Parameter(0), m::Parameter(2), m::Parameter(3)),
+          m::DynamicSlice(m::Parameter(1), m::Parameter(2), m::Parameter(3)))));
 }
-TEST_F(AlgebraicSimplifierTest, DynamicSliceDiv)
-{
-  // Testing DynamicSlice(Div(X, Y), I, S) ==> Div(DynamicSlice(X, I, S), DynamicSlice(Y, I, S))
+TEST_F(AlgebraicSimplifierTest, DynamicSliceDiv) {
+  // Testing DynamicSlice(Div(X, Y), I, S) ==> Div(DynamicSlice(X, I, S),
+  // DynamicSlice(Y, I, S))
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14760,14 +14758,16 @@ TEST_F(AlgebraicSimplifierTest, DynamicSliceDiv)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Divide(m::DynamicSlice(m::Parameter(0), m::Parameter(2), m::Parameter(3)),
-                                   m::DynamicSlice(m::Parameter(1), m::Parameter(2), m::Parameter(3)))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Divide(
+          m::DynamicSlice(m::Parameter(0), m::Parameter(2), m::Parameter(3)),
+          m::DynamicSlice(m::Parameter(1), m::Parameter(2), m::Parameter(3)))));
 }
 
-TEST_F(AlgebraicSimplifierTest, RevDot)
-{
-  // Testing Dot(Rev(X, dims1), Rev(Y, dims2), C, B) ==> Rev(Dot(X, Y, C, B), dims)
+TEST_F(AlgebraicSimplifierTest, RevDot) {
+  // Testing Dot(Rev(X, dims1), Rev(Y, dims2), C, B) ==> Rev(Dot(X, Y, C, B),
+  // dims)
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14786,8 +14786,7 @@ TEST_F(AlgebraicSimplifierTest, RevDot)
               GmockMatch(m::Reverse(m::Dot(m::Parameter(0), m::Parameter(1)))));
 }
 
-TEST_F(AlgebraicSimplifierTest, RevDot1)
-{
+TEST_F(AlgebraicSimplifierTest, RevDot1) {
   // Testing Dot(Rev(X, C2), Rev(Y, C2), C1 ∪ C2, B) ==> Dot(X, Y, C1 ∪ C2, B)
   const char* kModuleStr = R"(
     HloModule m
@@ -14812,9 +14811,9 @@ TEST_F(AlgebraicSimplifierTest, RevDot1)
               GmockMatch(m::Dot(m::Parameter(0), m::Parameter(1))));
 }
 
-TEST_F(AlgebraicSimplifierTest, RevDot2)
-{
-  // Testing Dot(Rev(X, B2), Rev(Y, B2), C, B1 ∪ B2) ==> Rev(Dot(X, Y, C, B1 ∪ B2), B2)
+TEST_F(AlgebraicSimplifierTest, RevDot2) {
+  // Testing Dot(Rev(X, B2), Rev(Y, B2), C, B1 ∪ B2) ==> Rev(Dot(X, Y, C, B1 ∪
+  // B2), B2)
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14838,9 +14837,9 @@ TEST_F(AlgebraicSimplifierTest, RevDot2)
               GmockMatch(m::Reverse(m::Dot(m::Parameter(0), m::Parameter(1)))));
 }
 
-TEST_F(AlgebraicSimplifierTest, ConcatMulMul)
-{
-  // Testing Concat(Mul(X, Slice(Z)), Mul(Y, Slice(Z)), dim) ==> Mul(Concat(X, Y, dim), Z)
+TEST_F(AlgebraicSimplifierTest, ConcatMulMul) {
+  // Testing Concat(Mul(X, Slice(Z)), Mul(Y, Slice(Z)), dim) ==> Mul(Concat(X,
+  // Y, dim), Z)
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14858,12 +14857,14 @@ TEST_F(AlgebraicSimplifierTest, ConcatMulMul)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Multiply(m::Concatenate(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Multiply(m::Concatenate(m::Parameter(0), m::Parameter(1)),
+                             m::Parameter(2))));
 }
-TEST_F(AlgebraicSimplifierTest, ConcatAddAdd)
-{
-  // Testing Concat(Add(X, Slice(Z)), Add(Y, Slice(Z)), dim) ==> Add(Concat(X, Y, dim), Z)
+TEST_F(AlgebraicSimplifierTest, ConcatAddAdd) {
+  // Testing Concat(Add(X, Slice(Z)), Add(Y, Slice(Z)), dim) ==> Add(Concat(X,
+  // Y, dim), Z)
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14881,12 +14882,14 @@ TEST_F(AlgebraicSimplifierTest, ConcatAddAdd)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Add(m::Concatenate(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Add(m::Concatenate(m::Parameter(0), m::Parameter(1)),
+                        m::Parameter(2))));
 }
-TEST_F(AlgebraicSimplifierTest, ConcatSubSub)
-{
-  // Testing Concat(Sub(X, Slice(Z)), Sub(Y, Slice(Z)), dim) ==> Sub(Concat(X, Y, dim), Z)
+TEST_F(AlgebraicSimplifierTest, ConcatSubSub) {
+  // Testing Concat(Sub(X, Slice(Z)), Sub(Y, Slice(Z)), dim) ==> Sub(Concat(X,
+  // Y, dim), Z)
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14904,12 +14907,14 @@ TEST_F(AlgebraicSimplifierTest, ConcatSubSub)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Subtract(m::Concatenate(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Subtract(m::Concatenate(m::Parameter(0), m::Parameter(1)),
+                             m::Parameter(2))));
 }
-TEST_F(AlgebraicSimplifierTest, ConcatDivDiv)
-{
-  // Testing Concat(Div(X, Slice(Z)), Div(Y, Slice(Z)), dim) ==> Div(Concat(X, Y, dim), Z)
+TEST_F(AlgebraicSimplifierTest, ConcatDivDiv) {
+  // Testing Concat(Div(X, Slice(Z)), Div(Y, Slice(Z)), dim) ==> Div(Concat(X,
+  // Y, dim), Z)
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14927,15 +14932,16 @@ TEST_F(AlgebraicSimplifierTest, ConcatDivDiv)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Divide(m::Concatenate(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Divide(m::Concatenate(m::Parameter(0), m::Parameter(1)),
+                           m::Parameter(2))));
 }
 
-TEST_F(AlgebraicSimplifierTest, ConcatenatePadPad)
-{
-  // Testing Concatenate(Pad(A, v, low, 0, int), Pad(B, v, 0, high, int), dim) ==> 
-  // Pad(Concatenate(A, B, dim), v, low, high, int)
-  // if int = 0 && low + Shape(A) >= 0 && high + Shape(B) >= 0
+TEST_F(AlgebraicSimplifierTest, ConcatenatePadPad) {
+  // Testing Concatenate(Pad(A, v, low, 0, int), Pad(B, v, 0, high, int), dim)
+  // ==> Pad(Concatenate(A, B, dim), v, low, high, int) if int = 0 && low +
+  // Shape(A) >= 0 && high + Shape(B) >= 0
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14951,14 +14957,15 @@ TEST_F(AlgebraicSimplifierTest, ConcatenatePadPad)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Pad(m::Concatenate(m::Parameter(0), m::Parameter(1)), m::Parameter(2))));
-
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Pad(m::Concatenate(m::Parameter(0), m::Parameter(1)),
+                        m::Parameter(2))));
 }
 
-TEST_F(AlgebraicSimplifierTest, AddConcatConcat)
-{
-  // Testing C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C = Add
+TEST_F(AlgebraicSimplifierTest, AddConcatConcat) {
+  // Testing C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U,
+  // V), dim) for C = Add
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -14975,14 +14982,15 @@ TEST_F(AlgebraicSimplifierTest, AddConcatConcat)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Concatenate(m::Add(m::Parameter(0), m::Parameter(1)), m::Add(m::Parameter(2), m::Parameter(3)))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Concatenate(m::Add(m::Parameter(0), m::Parameter(1)),
+                                m::Add(m::Parameter(2), m::Parameter(3)))));
 }
 
-
-TEST_F(AlgebraicSimplifierTest, MultiplyConcatConcat)
-{
-  // Testing C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C = Multiply
+TEST_F(AlgebraicSimplifierTest, MultiplyConcatConcat) {
+  // Testing C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U,
+  // V), dim) for C = Multiply
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -15000,13 +15008,14 @@ TEST_F(AlgebraicSimplifierTest, MultiplyConcatConcat)
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Concatenate(m::Multiply(m::Parameter(0), m::Parameter(1)), m::Multiply(m::Parameter(2), m::Parameter(3)))));
+              GmockMatch(m::Concatenate(
+                  m::Multiply(m::Parameter(0), m::Parameter(1)),
+                  m::Multiply(m::Parameter(2), m::Parameter(3)))));
 }
 
-
-TEST_F(AlgebraicSimplifierTest, DivideConcatConcat)
-{
-  // Testing C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C = Divide
+TEST_F(AlgebraicSimplifierTest, DivideConcatConcat) {
+  // Testing C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U,
+  // V), dim) for C = Divide
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -15023,14 +15032,15 @@ TEST_F(AlgebraicSimplifierTest, DivideConcatConcat)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Concatenate(m::Divide(m::Parameter(0), m::Parameter(1)), m::Divide(m::Parameter(2), m::Parameter(3)))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Concatenate(m::Divide(m::Parameter(0), m::Parameter(1)),
+                                m::Divide(m::Parameter(2), m::Parameter(3)))));
 }
 
-
-TEST_F(AlgebraicSimplifierTest, DivideConcatConcatInt)
-{
-  // Testing C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C = Divide
+TEST_F(AlgebraicSimplifierTest, DivideConcatConcatInt) {
+  // Testing C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U,
+  // V), dim) for C = Divide
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -15047,13 +15057,15 @@ TEST_F(AlgebraicSimplifierTest, DivideConcatConcatInt)
   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Concatenate(m::Divide(m::Parameter(0), m::Parameter(1)), m::Divide(m::Parameter(2), m::Parameter(3)))));
+  EXPECT_THAT(
+      m->entry_computation()->root_instruction(),
+      GmockMatch(m::Concatenate(m::Divide(m::Parameter(0), m::Parameter(1)),
+                                m::Divide(m::Parameter(2), m::Parameter(3)))));
 }
 
-TEST_F(AlgebraicSimplifierTest, SubtractConcatConcat)
-{
-  // Testing C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U, V), dim) for C = Subtract
+TEST_F(AlgebraicSimplifierTest, SubtractConcatConcat) {
+  // Testing C(Concat(X, U, dim), Concat(Y, V, dim)) ==> Concat(C(X, Y), C(U,
+  // V), dim) for C = Subtract
   const char* kModuleStr = R"(
     HloModule m
     test {
@@ -15071,7 +15083,9 @@ TEST_F(AlgebraicSimplifierTest, SubtractConcatConcat)
   AlgebraicSimplifier simplifier(default_options_);
   ASSERT_TRUE(simplifier.Run(m.get()).value());
   EXPECT_THAT(m->entry_computation()->root_instruction(),
-              GmockMatch(m::Concatenate(m::Subtract(m::Parameter(0), m::Parameter(1)), m::Subtract(m::Parameter(2), m::Parameter(3)))));
+              GmockMatch(m::Concatenate(
+                  m::Subtract(m::Parameter(0), m::Parameter(1)),
+                  m::Subtract(m::Parameter(2), m::Parameter(3)))));
 }
 
 }  // namespace
