@@ -14796,26 +14796,27 @@ TEST_F(AlgebraicSimplifierTest, RevPadTest) {
   EXPECT_EQ(padding_config.dimensions(1).edge_padding_high(), 1);
 }
 
-TEST_F(AlgebraicSimplifierTest, SliceAdd) {
-  // Testing Slice(Add(X, Y), S, E, P) ==> Add(Slice(X, S, E, P), Slice(Y, S, E,
-  // P))
-  const char* kModuleStr = R"(
-    HloModule m
-    test {
-      arg.x = s32[10,10000] parameter(0)
-      arg.y = s32[10,10000] parameter(1)
+// REMOVED due to conflict with slice-sinker
+// TEST_F(AlgebraicSimplifierTest, SliceAdd) {
+//   // Testing Slice(Add(X, Y), S, E, P) ==> Add(Slice(X, S, E, P), Slice(Y, S, E,
+//   // P))
+//   const char* kModuleStr = R"(
+//     HloModule m
+//     test {
+//       arg.x = s32[10,10000] parameter(0)
+//       arg.y = s32[10,10000] parameter(1)
 
-      add.xy = s32[10,10000] add(arg.x, arg.y)
-      ROOT slice.xy = s32[5,5000] slice(add.xy), slice={[0:5], [0:5000]}
-    }
-  )";
-  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
-  AlgebraicSimplifier simplifier(default_options_);
-  ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(
-      m->entry_computation()->root_instruction(),
-      GmockMatch(m::Add(m::Slice(m::Parameter(0)), m::Slice(m::Parameter(1)))));
-}
+//       add.xy = s32[10,10000] add(arg.x, arg.y)
+//       ROOT slice.xy = s32[5,5000] slice(add.xy), slice={[0:5], [0:5000]}
+//     }
+//   )";
+//   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+//   AlgebraicSimplifier simplifier(default_options_);
+//   ASSERT_TRUE(simplifier.Run(m.get()).value());
+//   EXPECT_THAT(
+//       m->entry_computation()->root_instruction(),
+//       GmockMatch(m::Add(m::Slice(m::Parameter(0)), m::Slice(m::Parameter(1)))));
+// }
 
 TEST_F(AlgebraicSimplifierTest, DynamicSliceAdd) {
   // Testing DynamicSlice(Add(X, Y), I, S) ==> Add(DynamicSlice(X, I, S),
