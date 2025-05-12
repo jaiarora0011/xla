@@ -14987,106 +14987,106 @@ TEST_F(AlgebraicSimplifierTest, RevDot2) {
               GmockMatch(m::Reverse(m::Dot(m::Parameter(0), m::Parameter(1)))));
 }
 
-TEST_F(AlgebraicSimplifierTest, ConcatMulMul) {
-  // Testing Concat(Mul(X, Slice(Z)), Mul(Y, Slice(Z)), dim) ==> Mul(Concat(X,
-  // Y, dim), Z)
-  const char* kModuleStr = R"(
-    HloModule m
-    test {
-      arg.x = s8[5,8] parameter(0)
-      arg.y = s8[5,8] parameter(1)
-      arg.z = s8[10,8] parameter(2)
+// TEST_F(AlgebraicSimplifierTest, ConcatMulMul) {
+//   // Testing Concat(Mul(X, Slice(Z)), Mul(Y, Slice(Z)), dim) ==> Mul(Concat(X,
+//   // Y, dim), Z)
+//   const char* kModuleStr = R"(
+//     HloModule m
+//     test {
+//       arg.x = s8[5,8] parameter(0)
+//       arg.y = s8[5,8] parameter(1)
+//       arg.z = s8[10,8] parameter(2)
 
-      arg.z.slice1 = s8[5,8] slice(arg.z), slice={[0:5], [0:8]}
-      arg.z.slice2 = s8[5,8] slice(arg.z), slice={[5:10], [0:8]}
-      mul.x = s8[5,8] multiply(arg.x, arg.z.slice1)
-      mul.y = s8[5,8] multiply(arg.y, arg.z.slice2)
-      ROOT concat = s8[10,8] concatenate(mul.x, mul.y), dimensions={0}
-    }
-  )";
-  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
-  AlgebraicSimplifier simplifier(default_options_);
-  ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(
-      m->entry_computation()->root_instruction(),
-      GmockMatch(m::Multiply(m::Concatenate(m::Parameter(0), m::Parameter(1)),
-                             m::Parameter(2))));
-}
-TEST_F(AlgebraicSimplifierTest, ConcatAddAdd) {
-  // Testing Concat(Add(X, Slice(Z)), Add(Y, Slice(Z)), dim) ==> Add(Concat(X,
-  // Y, dim), Z)
-  const char* kModuleStr = R"(
-    HloModule m
-    test {
-      arg.x = s8[5,8] parameter(0)
-      arg.y = s8[5,8] parameter(1)
-      arg.z = s8[10,8] parameter(2)
+//       arg.z.slice1 = s8[5,8] slice(arg.z), slice={[0:5], [0:8]}
+//       arg.z.slice2 = s8[5,8] slice(arg.z), slice={[5:10], [0:8]}
+//       mul.x = s8[5,8] multiply(arg.x, arg.z.slice1)
+//       mul.y = s8[5,8] multiply(arg.y, arg.z.slice2)
+//       ROOT concat = s8[10,8] concatenate(mul.x, mul.y), dimensions={0}
+//     }
+//   )";
+//   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+//   AlgebraicSimplifier simplifier(default_options_);
+//   ASSERT_TRUE(simplifier.Run(m.get()).value());
+//   EXPECT_THAT(
+//       m->entry_computation()->root_instruction(),
+//       GmockMatch(m::Multiply(m::Concatenate(m::Parameter(0), m::Parameter(1)),
+//                              m::Parameter(2))));
+// }
+// TEST_F(AlgebraicSimplifierTest, ConcatAddAdd) {
+//   // Testing Concat(Add(X, Slice(Z)), Add(Y, Slice(Z)), dim) ==> Add(Concat(X,
+//   // Y, dim), Z)
+//   const char* kModuleStr = R"(
+//     HloModule m
+//     test {
+//       arg.x = s8[5,8] parameter(0)
+//       arg.y = s8[5,8] parameter(1)
+//       arg.z = s8[10,8] parameter(2)
 
-      arg.z.slice1 = s8[5,8] slice(arg.z), slice={[0:5], [0:8]}
-      arg.z.slice2 = s8[5,8] slice(arg.z), slice={[5:10], [0:8]}
-      add.x = s8[5,8] add(arg.x, arg.z.slice1)
-      add.y = s8[5,8] add(arg.y, arg.z.slice2)
-      ROOT concat = s8[10,8] concatenate(add.x, add.y), dimensions={0}
-    }
-  )";
-  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
-  AlgebraicSimplifier simplifier(default_options_);
-  ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(
-      m->entry_computation()->root_instruction(),
-      GmockMatch(m::Add(m::Concatenate(m::Parameter(0), m::Parameter(1)),
-                        m::Parameter(2))));
-}
-TEST_F(AlgebraicSimplifierTest, ConcatSubSub) {
-  // Testing Concat(Sub(X, Slice(Z)), Sub(Y, Slice(Z)), dim) ==> Sub(Concat(X,
-  // Y, dim), Z)
-  const char* kModuleStr = R"(
-    HloModule m
-    test {
-      arg.x = s8[5,8] parameter(0)
-      arg.y = s8[5,8] parameter(1)
-      arg.z = s8[10,8] parameter(2)
+//       arg.z.slice1 = s8[5,8] slice(arg.z), slice={[0:5], [0:8]}
+//       arg.z.slice2 = s8[5,8] slice(arg.z), slice={[5:10], [0:8]}
+//       add.x = s8[5,8] add(arg.x, arg.z.slice1)
+//       add.y = s8[5,8] add(arg.y, arg.z.slice2)
+//       ROOT concat = s8[10,8] concatenate(add.x, add.y), dimensions={0}
+//     }
+//   )";
+//   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+//   AlgebraicSimplifier simplifier(default_options_);
+//   ASSERT_TRUE(simplifier.Run(m.get()).value());
+//   EXPECT_THAT(
+//       m->entry_computation()->root_instruction(),
+//       GmockMatch(m::Add(m::Concatenate(m::Parameter(0), m::Parameter(1)),
+//                         m::Parameter(2))));
+// }
+// TEST_F(AlgebraicSimplifierTest, ConcatSubSub) {
+//   // Testing Concat(Sub(X, Slice(Z)), Sub(Y, Slice(Z)), dim) ==> Sub(Concat(X,
+//   // Y, dim), Z)
+//   const char* kModuleStr = R"(
+//     HloModule m
+//     test {
+//       arg.x = s8[5,8] parameter(0)
+//       arg.y = s8[5,8] parameter(1)
+//       arg.z = s8[10,8] parameter(2)
 
-      arg.z.slice1 = s8[5,8] slice(arg.z), slice={[0:5], [0:8]}
-      arg.z.slice2 = s8[5,8] slice(arg.z), slice={[5:10], [0:8]}
-      sub.x = s8[5,8] subtract(arg.x, arg.z.slice1)
-      sub.y = s8[5,8] subtract(arg.y, arg.z.slice2)
-      ROOT concat = s8[10,8] concatenate(sub.x, sub.y), dimensions={0}
-    }
-  )";
-  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
-  AlgebraicSimplifier simplifier(default_options_);
-  ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(
-      m->entry_computation()->root_instruction(),
-      GmockMatch(m::Subtract(m::Concatenate(m::Parameter(0), m::Parameter(1)),
-                             m::Parameter(2))));
-}
-TEST_F(AlgebraicSimplifierTest, ConcatDivDiv) {
-  // Testing Concat(Div(X, Slice(Z)), Div(Y, Slice(Z)), dim) ==> Div(Concat(X,
-  // Y, dim), Z)
-  const char* kModuleStr = R"(
-    HloModule m
-    test {
-      arg.x = s8[5,8] parameter(0)
-      arg.y = s8[5,8] parameter(1)
-      arg.z = s8[10,8] parameter(2)
+//       arg.z.slice1 = s8[5,8] slice(arg.z), slice={[0:5], [0:8]}
+//       arg.z.slice2 = s8[5,8] slice(arg.z), slice={[5:10], [0:8]}
+//       sub.x = s8[5,8] subtract(arg.x, arg.z.slice1)
+//       sub.y = s8[5,8] subtract(arg.y, arg.z.slice2)
+//       ROOT concat = s8[10,8] concatenate(sub.x, sub.y), dimensions={0}
+//     }
+//   )";
+//   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+//   AlgebraicSimplifier simplifier(default_options_);
+//   ASSERT_TRUE(simplifier.Run(m.get()).value());
+//   EXPECT_THAT(
+//       m->entry_computation()->root_instruction(),
+//       GmockMatch(m::Subtract(m::Concatenate(m::Parameter(0), m::Parameter(1)),
+//                              m::Parameter(2))));
+// }
+// TEST_F(AlgebraicSimplifierTest, ConcatDivDiv) {
+//   // Testing Concat(Div(X, Slice(Z)), Div(Y, Slice(Z)), dim) ==> Div(Concat(X,
+//   // Y, dim), Z)
+//   const char* kModuleStr = R"(
+//     HloModule m
+//     test {
+//       arg.x = s8[5,8] parameter(0)
+//       arg.y = s8[5,8] parameter(1)
+//       arg.z = s8[10,8] parameter(2)
 
-      arg.z.slice1 = s8[5,8] slice(arg.z), slice={[0:5], [0:8]}
-      arg.z.slice2 = s8[5,8] slice(arg.z), slice={[5:10], [0:8]}
-      div.x = s8[5,8] divide(arg.x, arg.z.slice1)
-      div.y = s8[5,8] divide(arg.y, arg.z.slice2)
-      ROOT concat = s8[10,8] concatenate(div.x, div.y), dimensions={0}
-    }
-  )";
-  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
-  AlgebraicSimplifier simplifier(default_options_);
-  ASSERT_TRUE(simplifier.Run(m.get()).value());
-  EXPECT_THAT(
-      m->entry_computation()->root_instruction(),
-      GmockMatch(m::Divide(m::Concatenate(m::Parameter(0), m::Parameter(1)),
-                           m::Parameter(2))));
-}
+//       arg.z.slice1 = s8[5,8] slice(arg.z), slice={[0:5], [0:8]}
+//       arg.z.slice2 = s8[5,8] slice(arg.z), slice={[5:10], [0:8]}
+//       div.x = s8[5,8] divide(arg.x, arg.z.slice1)
+//       div.y = s8[5,8] divide(arg.y, arg.z.slice2)
+//       ROOT concat = s8[10,8] concatenate(div.x, div.y), dimensions={0}
+//     }
+//   )";
+//   TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+//   AlgebraicSimplifier simplifier(default_options_);
+//   ASSERT_TRUE(simplifier.Run(m.get()).value());
+//   EXPECT_THAT(
+//       m->entry_computation()->root_instruction(),
+//       GmockMatch(m::Divide(m::Concatenate(m::Parameter(0), m::Parameter(1)),
+//                            m::Parameter(2))));
+// }
 
 TEST_F(AlgebraicSimplifierTest, ConcatenatePadPad) {
   // Testing Concatenate(Pad(A, v, low, 0, int), Pad(B, v, 0, high, int), dim)

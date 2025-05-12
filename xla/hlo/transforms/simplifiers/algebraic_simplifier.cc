@@ -2239,104 +2239,109 @@ absl::Status AlgebraicSimplifierVisitor::HandleConcatenate(
     }
   }
 
+  // Removed due to conflict
   //- CS526
   // Implement Concat(Mul(X, Slice(Z)), Mul(Y, Slice(Z)), dim) ==> Mul(Concat(X,
   // Y, dim), Z)
-  HloInstruction* z;
-  if (Match(operands[0], m::MultiplyAnyOrder(m::Op(&x), m::Slice(m::Op(&z)))) &&
-      Match(operands[1],
-            m::MultiplyAnyOrder(m::Op(&y), m::Slice(m::Op().Is(z))))) {
-    auto dim = concatenate->concatenate_dimension();
-    auto x_shape = x->shape();
-    auto y_shape = y->shape();
+  // HloInstruction* z;
+  // if (Match(operands[0], m::MultiplyAnyOrder(m::Op(&x), m::Slice(m::Op(&z)))) &&
+  //     Match(operands[1],
+  //           m::MultiplyAnyOrder(m::Op(&y), m::Slice(m::Op().Is(z))))) {
+  //   auto dim = concatenate->concatenate_dimension();
+  //   auto x_shape = x->shape();
+  //   auto y_shape = y->shape();
 
-    Shape new_shape = x_shape;
-    for (int i = 0; i < new_shape.dimensions_size(); ++i) {
-      if (i == dim) {
-        new_shape.set_dimensions(i,
-                                 x_shape.dimensions(i) + y_shape.dimensions(i));
-      }
-    }
-    auto new_concat = operands[0]->AddInstruction(
-        HloInstruction::CreateConcatenate(new_shape, {x, y}, dim));
-    auto new_mul = operands[0]->AddInstruction(HloInstruction::CreateBinary(
-        concatenate->shape(), HloOpcode::kMultiply, new_concat, z));
-    std::cout << "[CS526][rule-110-applied][multiply]" << std::endl;
-    return ReplaceInstruction(concatenate, new_mul);
-  }
+  //   Shape new_shape = x_shape;
+  //   for (int i = 0; i < new_shape.dimensions_size(); ++i) {
+  //     if (i == dim) {
+  //       new_shape.set_dimensions(i,
+  //                                x_shape.dimensions(i) + y_shape.dimensions(i));
+  //     }
+  //   }
+  //   auto new_concat = operands[0]->AddInstruction(
+  //       HloInstruction::CreateConcatenate(new_shape, {x, y}, dim));
+  //   auto new_mul = operands[0]->AddInstruction(HloInstruction::CreateBinary(
+  //       concatenate->shape(), HloOpcode::kMultiply, new_concat, z));
+  //   std::cout << "[CS526][rule-110-applied][multiply]" << std::endl;
+  //   return ReplaceInstruction(concatenate, new_mul);
+  // }
 
+  // Removed due to conflict
   //- CS526
   // Implement Concat(Add(X, Slice(Z)), Add(Y, Slice(Z)), dim) ==> Add(Concat(X,
   // Y, dim), Z)
-  if (Match(operands[0], m::AddAnyOrder(m::Op(&x), m::Slice(m::Op(&z)))) &&
-      Match(operands[1], m::AddAnyOrder(m::Op(&y), m::Slice(m::Op().Is(z))))) {
-    auto dim = concatenate->concatenate_dimension();
-    auto x_shape = x->shape();
-    auto y_shape = y->shape();
+  // if (Match(operands[0], m::AddAnyOrder(m::Op(&x), m::Slice(m::Op(&z)))) &&
+  //     Match(operands[1], m::AddAnyOrder(m::Op(&y), m::Slice(m::Op().Is(z))))) {
+  //   auto dim = concatenate->concatenate_dimension();
+  //   auto x_shape = x->shape();
+  //   auto y_shape = y->shape();
 
-    Shape new_shape = x_shape;
-    for (int i = 0; i < new_shape.dimensions_size(); ++i) {
-      if (i == dim) {
-        new_shape.set_dimensions(i,
-                                 x_shape.dimensions(i) + y_shape.dimensions(i));
-      }
-    }
-    auto new_concat = operands[0]->AddInstruction(
-        HloInstruction::CreateConcatenate(new_shape, {x, y}, dim));
-    auto new_add = operands[0]->AddInstruction(HloInstruction::CreateBinary(
-        concatenate->shape(), HloOpcode::kAdd, new_concat, z));
-    std::cout << "[CS526][rule-110-applied][add]" << std::endl;
-    return ReplaceInstruction(concatenate, new_add);
-  }
+  //   Shape new_shape = x_shape;
+  //   for (int i = 0; i < new_shape.dimensions_size(); ++i) {
+  //     if (i == dim) {
+  //       new_shape.set_dimensions(i,
+  //                                x_shape.dimensions(i) + y_shape.dimensions(i));
+  //     }
+  //   }
+  //   auto new_concat = operands[0]->AddInstruction(
+  //       HloInstruction::CreateConcatenate(new_shape, {x, y}, dim));
+  //   auto new_add = operands[0]->AddInstruction(HloInstruction::CreateBinary(
+  //       concatenate->shape(), HloOpcode::kAdd, new_concat, z));
+  //   std::cout << "[CS526][rule-110-applied][add]" << std::endl;
+  //   return ReplaceInstruction(concatenate, new_add);
+  // }
 
+
+  // Removed due to conflict
   //- CS526
   // Implement Concat(Subtract(X, Slice(Z)), Subtract(Y, Slice(Z)), dim) ==>
   // Subtract(Concat(X, Y, dim), Z)
-  if (Match(operands[0], m::Subtract(m::Op(&x), m::Slice(m::Op(&z)))) &&
-      Match(operands[1], m::Subtract(m::Op(&y), m::Slice(m::Op().Is(z))))) {
-    auto dim = concatenate->concatenate_dimension();
-    auto x_shape = x->shape();
-    auto y_shape = y->shape();
+  // if (Match(operands[0], m::Subtract(m::Op(&x), m::Slice(m::Op(&z)))) &&
+  //     Match(operands[1], m::Subtract(m::Op(&y), m::Slice(m::Op().Is(z))))) {
+  //   auto dim = concatenate->concatenate_dimension();
+  //   auto x_shape = x->shape();
+  //   auto y_shape = y->shape();
 
-    Shape new_shape = x_shape;
-    for (int i = 0; i < new_shape.dimensions_size(); ++i) {
-      if (i == dim) {
-        new_shape.set_dimensions(i,
-                                 x_shape.dimensions(i) + y_shape.dimensions(i));
-      }
-    }
-    auto new_concat = operands[0]->AddInstruction(
-        HloInstruction::CreateConcatenate(new_shape, {x, y}, dim));
-    auto new_subtract =
-        operands[0]->AddInstruction(HloInstruction::CreateBinary(
-            concatenate->shape(), HloOpcode::kSubtract, new_concat, z));
-    std::cout << "[CS526][rule-110-applied][subtract]" << std::endl;
-    return ReplaceInstruction(concatenate, new_subtract);
-  }
+  //   Shape new_shape = x_shape;
+  //   for (int i = 0; i < new_shape.dimensions_size(); ++i) {
+  //     if (i == dim) {
+  //       new_shape.set_dimensions(i,
+  //                                x_shape.dimensions(i) + y_shape.dimensions(i));
+  //     }
+  //   }
+  //   auto new_concat = operands[0]->AddInstruction(
+  //       HloInstruction::CreateConcatenate(new_shape, {x, y}, dim));
+  //   auto new_subtract =
+  //       operands[0]->AddInstruction(HloInstruction::CreateBinary(
+  //           concatenate->shape(), HloOpcode::kSubtract, new_concat, z));
+  //   std::cout << "[CS526][rule-110-applied][subtract]" << std::endl;
+  //   return ReplaceInstruction(concatenate, new_subtract);
+  // }
 
+  // Removed due to conflict
   //- CS526
   // Implement Concat(Divide(X, Slice(Z)), Divide(Y, Slice(Z)), dim) ==>
   // Divide(Concat(X, Y, dim), Z)
-  if (Match(operands[0], m::Divide(m::Op(&x), m::Slice(m::Op(&z)))) &&
-      Match(operands[1], m::Divide(m::Op(&y), m::Slice(m::Op().Is(z))))) {
-    auto dim = concatenate->concatenate_dimension();
-    auto x_shape = x->shape();
-    auto y_shape = y->shape();
+  // if (Match(operands[0], m::Divide(m::Op(&x), m::Slice(m::Op(&z)))) &&
+  //     Match(operands[1], m::Divide(m::Op(&y), m::Slice(m::Op().Is(z))))) {
+  //   auto dim = concatenate->concatenate_dimension();
+  //   auto x_shape = x->shape();
+  //   auto y_shape = y->shape();
 
-    Shape new_shape = x_shape;
-    for (int i = 0; i < new_shape.dimensions_size(); ++i) {
-      if (i == dim) {
-        new_shape.set_dimensions(i,
-                                 x_shape.dimensions(i) + y_shape.dimensions(i));
-      }
-    }
-    auto new_concat = operands[0]->AddInstruction(
-        HloInstruction::CreateConcatenate(new_shape, {x, y}, dim));
-    auto new_divide = operands[0]->AddInstruction(HloInstruction::CreateBinary(
-        concatenate->shape(), HloOpcode::kDivide, new_concat, z));
-    std::cout << "[CS526][rule-110-applied][divide]" << std::endl;
-    return ReplaceInstruction(concatenate, new_divide);
-  }
+  //   Shape new_shape = x_shape;
+  //   for (int i = 0; i < new_shape.dimensions_size(); ++i) {
+  //     if (i == dim) {
+  //       new_shape.set_dimensions(i,
+  //                                x_shape.dimensions(i) + y_shape.dimensions(i));
+  //     }
+  //   }
+  //   auto new_concat = operands[0]->AddInstruction(
+  //       HloInstruction::CreateConcatenate(new_shape, {x, y}, dim));
+  //   auto new_divide = operands[0]->AddInstruction(HloInstruction::CreateBinary(
+  //       concatenate->shape(), HloOpcode::kDivide, new_concat, z));
+  //   std::cout << "[CS526][rule-110-applied][divide]" << std::endl;
+  //   return ReplaceInstruction(concatenate, new_divide);
+  // }
 
   //- CS526
   // Implement Concatenate(Pad(A, v, low, 0, int), Pad(B, v, 0, high, int), dim)
