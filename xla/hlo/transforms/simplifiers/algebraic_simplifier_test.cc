@@ -7519,6 +7519,25 @@ TEST_F(AlgebraicSimplifierTest, ConcatToBroadcast) {
   EXPECT_THAT(root, GmockMatch(m::Broadcast(m::Reshape(m::Parameter(0)))));
 }
 
+TEST_F(AlgebraicSimplifierTest, BinaryConcatToBroadcast) {
+  const char* hlo_string = R"(
+    HloModule module
+
+    ENTRY test {
+      p = f32[2,1,4] parameter(0)
+      ROOT concat = f32[2,2,4] concatenate(p,p), dimensions={1}
+    }
+  )";
+  TF_ASSERT_OK_AND_ASSIGN(auto module,
+                          ParseAndReturnVerifiedModule(hlo_string));
+
+  AlgebraicSimplifierOptions options = default_options_;
+  AlgebraicSimplifier simplifier(options);
+  EXPECT_TRUE(simplifier.Run(module.get()).value());
+  auto root = module->entry_computation()->root_instruction();
+  EXPECT_THAT(root, GmockMatch(m::Broadcast(m::Reshape(m::Parameter(0)))));
+}
+
 TEST_F(AlgebraicSimplifierTest, NegateNegate) {
   const char* hlo_string = R"(
     HloModule module
