@@ -7134,6 +7134,21 @@ absl::Status AlgebraicSimplifierVisitor::HandleSlice(HloInstruction* slice) {
                       RemoveRedundantStride(slice));
   if (removed_redundant_stride) {
     VLOG(10) << "Removed redundant stride for slice op.";
+    return absl::OkStatus();
+  }
+
+  // slice(iota(), dims) -> iota()
+  VLOG(10) << "Trying to simplify slice of iota: " << slice->ToString();
+  HloInstruction* iota;
+  if (Match(slice, m::Slice(m::Iota(&iota)))) {
+    HloIotaInstruction* iota_inst = Cast<HloIotaInstruction>(iota);
+    int64_t iota_dim = iota_inst->iota_dimension();
+    if (slice->slice_starts(iota_dim) == 0 &&
+        slice->slice_strides(iota_dim) == 1) {
+      std::cout << "[rule-applied][slice-iota]" << std::endl;
+      return ReplaceWithNewInstruction(
+          slice, HloInstruction::CreateIota(slice->shape(), iota_dim));
+    }
   }
 
   return absl::OkStatus();

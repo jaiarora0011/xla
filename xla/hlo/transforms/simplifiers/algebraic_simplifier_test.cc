@@ -13110,5 +13110,22 @@ ENTRY main {
                                /*allow_mixed_precision=*/true));
 }
 
+TEST_F(AlgebraicSimplifierTest, SliceIotaTest) {
+  const char* kModuleStr = R"(
+    HloModule m
+    test {
+      iota.0 = s8[6,9,12] iota(), iota_dimension=0
+      ROOT slice.res = s8[3,4,5] slice(iota.0), slice={[0:3:1], [0:7:2], [3:8:1]}
+    }
+)";
+  TF_ASSERT_OK_AND_ASSIGN(auto m, ParseAndReturnVerifiedModule(kModuleStr));
+  ASSERT_TRUE(AlgebraicSimplifier(default_options_).Run(m.get()).value());
+  EXPECT_THAT(m->entry_computation()->root_instruction(),
+              GmockMatch(m::Iota().WithShape(S8, {3, 4, 5})));
+  EXPECT_EQ(Cast<HloIotaInstruction>(m->entry_computation()->root_instruction())
+                ->iota_dimension(),
+            0);
+}
+
 }  // namespace
 }  // namespace xla
