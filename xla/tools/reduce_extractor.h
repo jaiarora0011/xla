@@ -1,0 +1,6 @@
+#ifndef XLA_TOOLS_REDUCE_EXTRACTOR_H_
+#define XLA_TOOLS_REDUCE_EXTRACTOR_H_
+
+void print_test();
+
+#endif // XLA_TOOLS_REDUCE_EXTRACTOR_H_

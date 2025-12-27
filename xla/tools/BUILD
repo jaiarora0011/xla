@@ -602,6 +602,25 @@ xla_cc_test(
 )
 
 cc_library(
+    name = "reduce_extractor_lib",
+    srcs = ["reduce_extractor.cc"],
+    hdrs = ["reduce_extractor.h"],
+    deps = [],
+)
+
+xla_cc_binary(
+    name = "reduce_extractor",
+    testonly = True,
+    srcs = ["reduce_extractor_main.cc"],
+    tags = [
+        "noasan",
+    ],
+    deps = [
+        ":reduce_extractor_lib",
+    ],
+)
+
+cc_library(
     name = "hlo_control_flow_flattening",
     srcs = ["hlo_control_flow_flattening.cc"],
     hdrs = ["hlo_control_flow_flattening.h"],
