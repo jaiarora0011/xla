@@ -33,3 +33,4 @@ tools/python_bin_path.sh
 .cache
 compile_commands.json
 external
+.clangd
