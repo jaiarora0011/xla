@@ -617,6 +617,14 @@ xla_cc_binary(
     ],
     deps = [
         ":reduce_extractor_lib",
+        ":hlo_module_loader",
+        "//xla/service:hlo_verifier",
+        "//xla/tsl/platform:statusor",
+        "//xla/tsl/util:command_line_flags",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/status",
+        "@tsl//tsl/platform",
     ],
 )
 
