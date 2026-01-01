@@ -26,6 +26,6 @@ absl::string_view RedFuncString(RedFuncType func);
 
 void ExtractReduceFunctions(std::unique_ptr<HloModule> module);
 
-} // namespace xla
+}  // namespace xla
 
-#endif // XLA_TOOLS_REDUCE_EXTRACTOR_H_
+#endif  // XLA_TOOLS_REDUCE_EXTRACTOR_H_

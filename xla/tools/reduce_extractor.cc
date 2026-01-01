@@ -72,7 +72,8 @@ void ExtractReduceFunctions(std::unique_ptr<HloModule> module) {
     }
   }
 
-  std::cout << "Total reduction functions found: " << functions.size() << std::endl;
+  std::cout << "Total reduction functions found: " << functions.size()
+            << std::endl;
   for (const auto& [func_type, freq] : func_type_freq) {
     std::cout << "  " << RedFuncString(func_type) << ": " << freq << std::endl;
   }
