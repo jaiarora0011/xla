@@ -605,7 +605,12 @@ cc_library(
     name = "reduce_extractor_lib",
     srcs = ["reduce_extractor.cc"],
     hdrs = ["reduce_extractor.h"],
-    deps = [],
+    deps = [
+        "//xla/hlo/ir:hlo",
+        "//xla/service:pattern_matcher",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/container:flat_hash_map",
+    ],
 )
 
 xla_cc_binary(

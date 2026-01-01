@@ -43,6 +43,9 @@ absl::Status RunReduceExtractor(const ReduceExtractorConfig& opts) {
       HloVerifierOpts{}.WithLayoutSensitive(false).WithAllowMixedPrecision(
           true));
   TF_RETURN_IF_ERROR(verifier.Run(module.get()).status());
+
+  ExtractReduceFunctions(std::move(module));
+
   return absl::OkStatus();
 }
 
@@ -77,7 +80,7 @@ int main(int argc, char** argv) {
 
   absl::Status status = xla::RunReduceExtractor(opts);
   if (!status.ok()) {
-    std::cerr << status << "\n";
+    std::cerr << status << std::endl;
     return 1;
   }
   return 0;
