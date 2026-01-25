@@ -15,6 +15,17 @@
 CompileFlags:
   # Use the compile_commands.json for build flags
   CompilationDatabase: .
+  Add: [
+    "-Iexternal/com_google_googletest/googletest/include",
+    "-Iexternal/com_google_googletest/googlemock/include/",
+    "-isystem", "/usr/include/c++/11",
+    "-isystem", "/usr/include/x86_64-linux-gnu/c++/11",
+    "-isystem", "/usr/include/c++/11/backward",
+    "-isystem", "/home/jaia3/llvm-project/build/lib/clang/18/include",
+    "-isystem", "/usr/local/include",
+    "-isystem", "/usr/include/x86_64-linux-gnu",
+    "-isystem", "/usr/include"
+  ]
 
 Diagnostics:
   # Enable strict include checking
