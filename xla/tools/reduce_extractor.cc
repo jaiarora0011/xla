@@ -1,7 +1,12 @@
 #include <iostream>
+#include <memory>
 
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/strings/string_view.h"
+#include "xla/hlo/ir/hlo_computation.h"
+#include "xla/hlo/ir/hlo_instruction.h"
+#include "xla/hlo/ir/hlo_opcode.h"
 #include "xla/service/pattern_matcher.h"
 #include "xla/tools/reduce_extractor.h"
 

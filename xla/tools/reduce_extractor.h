@@ -3,6 +3,8 @@
 
 #include <memory>
 #include <string>
+
+#include "absl/strings/string_view.h"
 #include "xla/hlo/ir/hlo_module.h"
 
 namespace xla {

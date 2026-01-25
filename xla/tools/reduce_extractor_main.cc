@@ -1,4 +1,7 @@
 #include <iostream>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "absl/strings/str_cat.h"
 #include "absl/log/check.h"
@@ -6,6 +9,7 @@
 #include "xla/service/hlo_verifier.h"
 #include "xla/tsl/util/command_line_flags.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/platform/errors.h"
 #include "xla/tools/reduce_extractor.h"
 #include "xla/tools/hlo_module_loader.h"
 #include "tsl/platform/init_main.h"
