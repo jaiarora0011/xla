@@ -615,6 +615,38 @@ xla_cc_test(
 )
 
 cc_library(
+    name = "reduce_extractor_lib",
+    srcs = ["reduce_extractor.cc"],
+    hdrs = ["reduce_extractor.h"],
+    deps = [
+        "//xla/hlo/ir:hlo",
+        "//xla/service:pattern_matcher",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/container:flat_hash_map",
+    ],
+)
+
+xla_cc_binary(
+    name = "reduce_extractor",
+    testonly = True,
+    srcs = ["reduce_extractor_main.cc"],
+    tags = [
+        "noasan",
+    ],
+    deps = [
+        ":reduce_extractor_lib",
+        ":hlo_module_loader",
+        "//xla/service:hlo_verifier",
+        "//xla/tsl/platform:statusor",
+        "//xla/tsl/util:command_line_flags",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/status",
+        "@tsl//tsl/platform",
+    ],
+)
+
+cc_library(
     name = "hlo_control_flow_flattening",
     srcs = ["hlo_control_flow_flattening.cc"],
     hdrs = ["hlo_control_flow_flattening.h"],
